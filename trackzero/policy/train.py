@@ -10,7 +10,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
 
 from trackzero.policy.mlp import InverseDynamicsMLP, save_checkpoint
 
@@ -108,17 +107,11 @@ def train(
     # Compute normalization from training data
     input_mean, input_std = compute_normalization(train_inputs)
 
-    # Convert to pinned-memory tensors for fast GPU transfer
-    use_cuda = device != "cpu"
-    train_x = torch.from_numpy(train_inputs).float()
-    train_y = torch.from_numpy(train_targets).float()
-    val_x = torch.from_numpy(val_inputs).float()
-    val_y = torch.from_numpy(val_targets).float()
-    if use_cuda:
-        train_x = train_x.pin_memory()
-        train_y = train_y.pin_memory()
-        val_x = val_x.pin_memory()
-        val_y = val_y.pin_memory()
+    # Move all data to GPU upfront (40M pairs × 10 floats ≈ 1.5 GB — fits easily)
+    train_x = torch.from_numpy(train_inputs).float().to(device)
+    train_y = torch.from_numpy(train_targets).float().to(device)
+    val_x = torch.from_numpy(val_inputs).float().to(device)
+    val_y = torch.from_numpy(val_targets).float().to(device)
 
     # Free numpy arrays
     del train_inputs, train_targets, val_inputs, val_targets
@@ -153,15 +146,15 @@ def train(
     n_val = len(val_x)
 
     for epoch in range(1, cfg.epochs + 1):
-        # Train with random permutation batching
+        # Random batch order (generate permutation on CPU to save GPU memory)
         model.train()
         perm = torch.randperm(n_train)
         epoch_loss = 0.0
         n_batches = 0
         for i in range(0, n_train, cfg.batch_size):
-            idx = perm[i : i + cfg.batch_size]
-            x_batch = train_x[idx].to(device, non_blocking=True)
-            y_batch = train_y[idx].to(device, non_blocking=True)
+            idx = perm[i : i + cfg.batch_size].to(device, non_blocking=True)
+            x_batch = train_x[idx]
+            y_batch = train_y[idx]
 
             pred = model(x_batch)
             loss = criterion(pred, y_batch)
@@ -180,8 +173,8 @@ def train(
         val_loss_sum = 0.0
         with torch.no_grad():
             for i in range(0, n_val, cfg.batch_size * 4):
-                x_batch = val_x[i : i + cfg.batch_size * 4].to(device, non_blocking=True)
-                y_batch = val_y[i : i + cfg.batch_size * 4].to(device, non_blocking=True)
+                x_batch = val_x[i : i + cfg.batch_size * 4]
+                y_batch = val_y[i : i + cfg.batch_size * 4]
                 pred = model(x_batch)
                 val_loss_sum += criterion(pred, y_batch).item() * len(x_batch)
         val_loss = val_loss_sum / n_val
