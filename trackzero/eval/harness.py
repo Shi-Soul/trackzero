@@ -269,10 +269,13 @@ class EvalHarness:
         if gpu_sim is None or gpu_sim.n_worlds < N:
             gpu_sim = GPUSimulator(self.cfg, n_worlds=max(N, 1), device=gpu_device)
 
-        # Reset to reference initial states
-        q0_t = torch.tensor(ref_states[:, 0, :2], dtype=torch.float32, device=gpu_device)
-        v0_t = torch.tensor(ref_states[:, 0, 2:], dtype=torch.float32, device=gpu_device)
-        gpu_sim.reset_envs(q0_t, v0_t)
+        # Reset all envs (pad to n_worlds if N < n_worlds)
+        nw = gpu_sim.n_worlds
+        q0_full = torch.zeros(nw, 2, dtype=torch.float32, device=gpu_device)
+        v0_full = torch.zeros(nw, 2, dtype=torch.float32, device=gpu_device)
+        q0_full[:N] = torch.tensor(ref_states[:, 0, :2], dtype=torch.float32, device=gpu_device)
+        v0_full[:N] = torch.tensor(ref_states[:, 0, 2:], dtype=torch.float32, device=gpu_device)
+        gpu_sim.reset_envs(q0_full, v0_full)
 
         # Batched closed-loop rollout
         actual_states = np.zeros((N, T + 1, 4), dtype=np.float32)
@@ -280,20 +283,26 @@ class EvalHarness:
 
         current_states = actual_states[:, 0].copy()
 
-        for t in range(T):
-            # Batched policy inference (numpy)
-            ref_next = ref_states[:, t + 1].astype(np.float32)
-            actions_np = np.stack([
-                policy(current_states[i], ref_next[i]) for i in range(N)
-            ])
+        has_batch = hasattr(policy, 'batch_call')
 
-            # Step all envs on GPU
-            ctrl = torch.tensor(actions_np, dtype=torch.float32, device=gpu_device)
+        for t in range(T):
+            # Policy inference (only for the N active trajectories)
+            ref_next = ref_states[:, t + 1].astype(np.float32)
+            if has_batch:
+                actions_np = policy.batch_call(current_states, ref_next)
+            else:
+                actions_np = np.stack([
+                    policy(current_states[i], ref_next[i]) for i in range(N)
+                ])
+
+            # Pad controls to n_worlds and step all envs
+            ctrl = torch.zeros(nw, 2, dtype=torch.float32, device=gpu_device)
+            ctrl[:N] = torch.tensor(actions_np, dtype=torch.float32, device=gpu_device)
             qpos, qvel = gpu_sim.step_envs(ctrl)
 
-            # Record states
-            current_states[:, :2] = qpos.cpu().numpy()
-            current_states[:, 2:] = qvel.cpu().numpy()
+            # Record states (only first N)
+            current_states[:, :2] = qpos[:N].cpu().numpy()
+            current_states[:, 2:] = qvel[:N].cpu().numpy()
             actual_states[:, t + 1] = current_states
 
         # Compute metrics for all trajectories

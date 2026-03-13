@@ -83,6 +83,16 @@ class MLPPolicy:
             action = self.model(x_t).squeeze(0).cpu().numpy()
         return np.clip(action, -self.tau_max, self.tau_max)
 
+    def batch_call(
+        self, current_states: np.ndarray, ref_next_states: np.ndarray
+    ) -> np.ndarray:
+        """Batched policy: (N, state_dim), (N, state_dim) -> (N, action_dim)."""
+        x = np.concatenate([current_states, ref_next_states], axis=1).astype(np.float32)
+        with torch.no_grad():
+            x_t = torch.from_numpy(x).to(self.device)
+            actions = self.model(x_t).cpu().numpy()
+        return np.clip(actions, -self.tau_max, self.tau_max)
+
 
 def save_checkpoint(
     model: InverseDynamicsMLP,
