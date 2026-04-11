@@ -138,6 +138,56 @@ def plot_trajectory_diagnostics(
     return fig
 
 
+def plot_policy_comparison(
+    summaries: list[tuple[str, "EvalSummary"]],
+    save_path: Optional[str | Path] = None,
+) -> plt.Figure:
+    """Compare multiple policies: CDF + bar chart side by side.
+
+    Args:
+        summaries: list of (label, EvalSummary) pairs
+        save_path: optional save path
+    """
+    colors = ["steelblue", "darkorange", "seagreen", "crimson", "purple"]
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # --- left: CDF of MSE_total on log scale ---
+    ax = axes[0]
+    for (label, summary), color in zip(summaries, colors):
+        data = np.sort([r.mse_total for r in summary.results])
+        cdf = np.arange(1, len(data) + 1) / len(data)
+        ax.plot(data, cdf, label=label, color=color, linewidth=2)
+    ax.set_xscale("log")
+    ax.set_xlabel("MSE_total (log scale)")
+    ax.set_ylabel("CDF")
+    ax.set_title("MSE_total CDF — policy comparison")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # --- right: bar chart of mean metrics ---
+    ax = axes[1]
+    metric_labels = ["Mean\nMSE_q", "Mean\nMSE_v", "Mean\nMSE_total"]
+    x = np.arange(len(metric_labels))
+    width = 0.8 / len(summaries)
+    offsets = np.linspace(-(len(summaries) - 1) / 2, (len(summaries) - 1) / 2, len(summaries)) * width
+    for (label, summary), color, offset in zip(summaries, colors, offsets):
+        values = [summary.mean_mse_q, summary.mean_mse_v, summary.mean_mse_total]
+        ax.bar(x + offset, values, width=width, label=label, color=color, alpha=0.85)
+    ax.set_yscale("log")
+    ax.set_xticks(x)
+    ax.set_xticklabels(metric_labels)
+    ax.set_ylabel("Error (log scale)")
+    ax.set_title("Mean tracking error by policy")
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis="y")
+
+    fig.tight_layout()
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
 def plot_oracle_verification(
     errors: np.ndarray,
     save_path: Optional[str | Path] = None,

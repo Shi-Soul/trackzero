@@ -14,6 +14,7 @@ from trackzero.viz.plots import (
     plot_error_histogram,
     plot_error_cdf,
     plot_trajectory_diagnostics,
+    plot_policy_comparison,
 )
 from trackzero.viz.playback import animate_pendulum
 
@@ -23,6 +24,8 @@ def main():
     parser.add_argument("--config", type=str, default="configs/default.yaml")
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--eval-results", type=str, default=None)
+    parser.add_argument("--compare-policies", type=str, nargs="+", metavar="LABEL:PATH",
+                        help="Compare multiple eval JSONs, e.g. Oracle:outputs/oracle_eval.json")
     parser.add_argument("--output-dir", type=str, default="outputs")
     parser.add_argument("--animate-trajectory", type=int, default=None,
                         help="Index of trajectory to animate")
@@ -63,6 +66,17 @@ def main():
             print(f"  Animation saved to {output_dir / f'trajectory_{idx}.gif'}")
 
         ds.close()
+
+    # Multi-policy comparison
+    if args.compare_policies:
+        summaries = []
+        for spec in args.compare_policies:
+            label, path = spec.split(":", 1)
+            summaries.append((label, EvalSummary.from_json(path)))
+            print(f"  Loaded: {label} ({path})")
+        out = output_dir / "policy_comparison.png"
+        plot_policy_comparison(summaries, save_path=out)
+        print(f"  Comparison plot saved to {out}")
 
     # Evaluation plots
     if args.eval_results:

@@ -1,0 +1,30 @@
+# TRACK-ZERO Stage 0 Configuration
+
+pendulum:
+  link_length: 0.5          # meters
+  link_mass: 1.0            # kg
+  link_inertia: [0.02, 0.02, 0.001]  # kg*m^2 (diag)
+  joint_damping: 0.5        # Nm*s/rad
+  tau_max: 5.0              # Nm per joint
+  gravity: 9.81             # m/s^2
+
+simulation:
+  dt: 0.002                 # physics timestep (s)
+  control_dt: 0.01          # control timestep (s) = 5 substeps
+  integrator: "RK4"
+
+dataset:
+  n_train: 2000
+  n_test: 500
+  trajectory_duration: 5.0  # seconds
+  multisine:
+    k_range: [3, 8]         # number of sinusoid components
+    freq_range: [0.1, 3.0]  # Hz, log-uniform
+  initial_state:
+    q_range: [-3.14159265, 3.14159265]  # radians
+    v_range: [-3.0, 3.0]               # rad/s
+  num_workers: 8
+  chunk_size: 100
+
+eval:
+  mse_velocity_weight: 0.1  # MSE_total = MSE_q + weight * MSE_v
