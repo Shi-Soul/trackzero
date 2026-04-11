@@ -138,6 +138,45 @@ def plot_trajectory_diagnostics(
     return fig
 
 
+def plot_trajectory_comparison(
+    ref_states: np.ndarray,
+    policy_rollouts: list[tuple[str, np.ndarray]],
+    control_dt: float,
+    save_path: Optional[str | Path] = None,
+) -> plt.Figure:
+    """Plot reference vs multiple policy rollouts for one trajectory.
+
+    Args:
+        ref_states: (T+1, 4) reference state trajectory.
+        policy_rollouts: list of (label, actual_states (T+1, 4)).
+        control_dt: time step in seconds.
+        save_path: optional path to save figure.
+    """
+    colors = ["steelblue", "darkorange", "seagreen", "crimson", "purple"]
+    T = len(ref_states) - 1
+    times = np.arange(T + 1) * control_dt
+
+    state_labels = ["q₁ (rad)", "q₂ (rad)", "dq₁ (rad/s)", "dq₂ (rad/s)"]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    for i, (ax, slabel) in enumerate(zip(axes.flat, state_labels)):
+        ax.plot(times, ref_states[:, i], "k--", linewidth=2, label="Reference", zorder=5)
+        for (label, actual), color in zip(policy_rollouts, colors):
+            ax.plot(times, actual[:, i], color=color, linewidth=1.5, alpha=0.85, label=label)
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel(slabel)
+        ax.set_title(slabel)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+    fig.suptitle("Closed-loop rollout: reference vs policy trajectories", fontsize=13)
+    fig.tight_layout()
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    return fig
+
+
 def plot_policy_comparison(
     summaries: list[tuple[str, "EvalSummary"]],
     save_path: Optional[str | Path] = None,

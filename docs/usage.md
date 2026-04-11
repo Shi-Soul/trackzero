@@ -40,6 +40,10 @@ Produces `data/train.h5` and `data/test.h5`.
 
 ### 2.2 Verify the inverse dynamics oracle
 
+这个是per step 的 action prediction error, 不是dynamics rollout error
+
+形式: (state, qacc) -> action <-> error
+
 ```bash
 uv run python scripts/verify_oracle.py \
     --config configs/default.yaml \
