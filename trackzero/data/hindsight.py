@@ -102,19 +102,41 @@ def _rollout_policy_cpu(
     policy,
     ref_states: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Batched CPU rollout: batch policy calls across all trajectories at each timestep,
+    but step each simulator individually (physics must be sequential per trajectory)."""
     n_traj, t_plus_1, _ = ref_states.shape
     t_steps = t_plus_1 - 1
     actual_states = np.zeros((n_traj, t_steps + 1, 4), dtype=np.float64)
     actual_actions = np.zeros((n_traj, t_steps, 2), dtype=np.float64)
 
+    # Initialize all simulators
+    sims = []
     for i in range(n_traj):
         sim = Simulator(cfg)
         sim.reset(q0=ref_states[i, 0, :2], v0=ref_states[i, 0, 2:])
         actual_states[i, 0] = sim.get_state()
-        for t in range(t_steps):
-            action = policy(actual_states[i, t], ref_states[i, t + 1])
-            actual_actions[i, t] = action
-            actual_states[i, t + 1] = sim.step(action)
+        sims.append(sim)
+
+    has_batch = hasattr(policy, "batch_call")
+
+    for t in range(t_steps):
+        current_batch = actual_states[:, t].astype(np.float32)
+        ref_next_batch = ref_states[:, t + 1].astype(np.float32)
+
+        if has_batch:
+            actions_np = policy.batch_call(current_batch, ref_next_batch)
+        else:
+            actions_np = np.stack([
+                policy(current_batch[i], ref_next_batch[i]) for i in range(n_traj)
+            ])
+        actual_actions[:, t] = actions_np
+
+        for i in range(n_traj):
+            actual_states[i, t + 1] = sims[i].step(actions_np[i])
+
+        if t % 100 == 0:
+            print(f"  hindsight rollout step {t}/{t_steps}")
+
     return actual_states, actual_actions
 
 

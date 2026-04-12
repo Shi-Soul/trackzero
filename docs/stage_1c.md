@@ -1,295 +1,138 @@
-# Stage 1C: Active Data Collection via Ensemble Disagreement
+# Stage 1C: Entropy-Driven Coverage — Multi-Variant Synthesis
 
-## Executive summary
+## Executive Summary
 
-This first Stage 1C pass implemented an **ensemble-disagreement active collector** and compared it against a matched random-rollout baseline.
+Stage 1C explored **five** coverage/diversity strategies from the proposal:
 
-The result is negative:
+1. **Ensemble disagreement** — select high-uncertainty trajectories
+2. **Bin rebalancing** — favor trajectories visiting rare 4D state bins
+3. **Low-density / max-entropy proxy** — select trajectories in sparse regions
+4. **Hybrid coverage** — z-score combination of density + rebalancing
+5. **Hindsight relabeling** — roll out teacher on hard refs, relabel achieved motion
 
-1. **The active collector worked technically**: ensemble training, disagreement scoring, trajectory selection, final training, and evaluation all ran end-to-end.
-2. **It did not improve model quality**.
-3. On held-out multisine test trajectories, the active model was worse than the matched random baseline:
-   - random matched: `1.185e-4` mean `MSE_total`
-   - active collection: `1.662e-4`
-4. On OOD references, the active model also failed to beat the matched random baseline, and usually lost badly on the harder families.
+**Core finding: No Stage 1C method consistently beats the matched random baseline.**
 
-So the current Stage 1C conclusion is:
+The random-rollout baseline remains the strongest overall strategy. Each diversity
+method helps on 1–2 specific OOD families but hurts on the critical `mixed_ood`
+benchmark. This is a significant negative result — for this system, naive uniform
+random data is hard to beat with post-hoc selection.
 
-> **naive trajectory-level ensemble disagreement is not yet a win over strong random-rollout training.**
-
----
-
-## What was implemented
-
-New code:
-
-| File | Role |
-| --- | --- |
-| `trackzero/data/active_collection.py` | Bootstrap ensemble training helpers, disagreement scoring, top-trajectory selection |
-| `scripts/train_active.py` | End-to-end Stage 1C training entrypoint |
-
-### Active-collection algorithm
-
-The implemented pipeline is:
-
-1. Generate a **seed dataset** from random rollouts.
-2. Train an **ensemble** of inverse-dynamics models on bootstrap resamples of that seed data.
-3. Generate a larger **candidate pool** of rollout trajectories.
-4. Score each candidate trajectory by **ensemble action-prediction variance** over all transitions in that trajectory.
-5. Keep the highest-disagreement trajectories.
-6. Train the final Stage 1C model on:
-   - seed trajectories
-   - selected high-disagreement trajectories
-
-The disagreement score is computed from variance of predicted torques for the same `(current_state, next_state)` inputs.
+See `stage_1c_commands.md` for exact reproduction commands.
+See `stage_1c_details.md` for per-variant failure-mode discussion.
 
 ---
 
-## Exact commands and artifacts
+## Experimental Setup
 
-### 1. Pilot sanity check
-
-```bash
-uv run python scripts/train_active.py \
-  --config configs/medium.yaml \
-  --val-data data/medium/test.h5 \
-  --output-dir outputs/stage1c_pilot \
-  --seed-trajectories 200 \
-  --candidate-trajectories 400 \
-  --select-trajectories 200 \
-  --proposal-action-type mixed \
-  --ensemble-size 2 \
-  --ensemble-hidden-dim 128 \
-  --ensemble-n-hidden 2 \
-  --ensemble-epochs 2 \
-  --final-hidden-dim 128 \
-  --final-n-hidden 2 \
-  --final-epochs 2 \
-  --batch-size 8192 \
-  --lr 1e-3 \
-  --device cuda:0 \
-  --eval-trajectories 20
-```
-
-Artifacts:
-
-- `outputs/stage1c_pilot/metadata.json`
-- `outputs/stage1c_pilot/eval_results.json`
-
-This run only validated the pipeline.
-
-### 2. Full active run
-
-```bash
-uv run python scripts/train_active.py \
-  --config configs/medium.yaml \
-  --val-data data/medium/test.h5 \
-  --output-dir outputs/stage1c_active_full \
-  --seed-trajectories 2000 \
-  --candidate-trajectories 12000 \
-  --select-trajectories 8000 \
-  --proposal-action-type mixed \
-  --ensemble-size 3 \
-  --ensemble-hidden-dim 256 \
-  --ensemble-n-hidden 3 \
-  --ensemble-epochs 20 \
-  --final-hidden-dim 512 \
-  --final-n-hidden 4 \
-  --final-epochs 100 \
-  --batch-size 65536 \
-  --lr 1e-3 \
-  --device cuda:0 \
-  --eval-trajectories 200
-```
-
-Artifacts:
-
-- `outputs/stage1c_active_full/metadata.json`
-- `outputs/stage1c_active_full/eval_results.json`
-- `outputs/stage1c_active_full/ensemble/member_*/best_model.pt`
-
-### 3. Matched random baseline
-
-```bash
-uv run python scripts/train_random_rollout.py \
-  --config configs/medium.yaml \
-  --val-data data/medium/test.h5 \
-  --output-dir outputs/stage1c_random_matched \
-  --n-trajectories 10000 \
-  --action-type mixed \
-  --epochs 100 \
-  --batch-size 65536 \
-  --lr 1e-3 \
-  --hidden-dim 512 \
-  --n-hidden 4 \
-  --seed 42 \
-  --device cuda:1 \
-  --eval-trajectories 200
-```
-
-Artifacts:
-
-- `outputs/stage1c_random_matched/metadata.json`
-- `outputs/stage1c_random_matched/eval_results.json`
-
-### 4. OOD comparison
-
-```bash
-uv run python scripts/eval_ood.py \
-  --config configs/medium.yaml \
-  --model-1a outputs/stage1c_random_matched/best_model.pt \
-  --model-1b outputs/stage1c_active_full/best_model.pt \
-  --model-best outputs/stage1b_scaled/best_model.pt \
-  --n-trajectories 300 \
-  --eval-trajectories 200 \
-  --output-dir outputs/stage1c_ood_compare
-```
-
-Label mapping in this run:
-
-| Eval label in JSON | Actual model |
-| --- | --- |
-| `1A_supervised` | `outputs/stage1c_random_matched/best_model.pt` |
-| `1B_random_rollout` | `outputs/stage1c_active_full/best_model.pt` |
-| `1B_best_dist` | `outputs/stage1b_scaled/best_model.pt` |
-
-Artifacts:
-
-- `outputs/stage1c_ood_compare/ood_comparison.json`
-- `outputs/stage1c_ood_compare/*_details.json`
+All Stage 1C variants share a matched budget:
+- **Seed data:** 2000 random-rollout trajectories (mixed action types)
+- **Candidate pool:** 12000 trajectories (except hindsight: 4000 teacher rollouts)
+- **Selected:** 8000 trajectories merged with seed = 10000 total
+- **Architecture:** MLP 512x4, 100 epochs, batch 65536, lr=1e-3, cosine schedule
+- **Baseline:** `outputs/stage1c_random_matched/` (10000 pure random trajectories)
+- **Reference:** `outputs/stage1b_scaled/` (old Stage 1B best)
 
 ---
 
-## Active-selection statistics
+## ID Results (Multisine Test Set)
 
-From `outputs/stage1c_active_full/metadata.json`:
+| Method | mean MSE_total | max MSE_total | median MSE_total |
+|---|---:|---:|---:|
+| **random_matched** | **1.185e-4** | 2.156e-3 | 6.182e-5 |
+| hybrid_coverage | 1.478e-4 | 2.759e-3 | 6.389e-5 |
+| low_density | 1.532e-4 | 2.928e-3 | 7.221e-5 |
+| disagreement | 1.662e-4 | 3.807e-3 | 8.321e-5 |
+| rebalance_bins | 1.950e-4 | 7.620e-3 | 7.543e-5 |
+| hindsight | 2.894e-4 | 1.816e-2 | 7.970e-5 |
 
-| Field | Value |
-| --- | ---: |
-| seed trajectories | 2000 |
-| candidate trajectories | 12000 |
-| selected trajectories | 8000 |
-| ensemble size | 3 |
-| ensemble architecture | `256 x 3` |
-| final architecture | `512 x 4` |
-| ensemble best val losses | 1.600, 1.548, 1.633 |
-| candidate mean disagreement score | 0.0785 |
-| selected mean disagreement score | 0.1047 |
-| selected minimum score | 0.0379 |
-| selected maximum score | 4.5131 |
-
-So the selector did what it was supposed to do:
-
-- it **found measurably higher-disagreement trajectories**
-- it **biased the final dataset toward them**
-
-The failure is therefore not a bug in ranking; it is a failure of the current **selection criterion** to improve the final policy.
+Random baseline wins ID cleanly. Hindsight is worst (2.4x worse).
 
 ---
 
-## ID results: active vs matched random
+## OOD Results (mean MSE_total)
 
-Held-out multisine evaluation, from:
+| OOD family | random | disagree | rebalance | density | hybrid | hindsight | stage1b | winner |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| chirp | **2.16e-4** | 3.01e-4 | 2.47e-4 | 2.49e-4 | 2.48e-4 | 3.32e-4 | 3.04e-4 | random |
+| step | 3.34e-2 | **3.34e-2** | 3.92e-2 | 3.63e-2 | 3.68e-2 | 6.71e-2 | 4.71e-2 | disagree~random |
+| random_walk | 1.74e-2 | 2.33e-2 | 1.60e-2 | 2.03e-2 | 2.44e-2 | 3.59e-2 | **1.38e-2** | stage1b |
+| sawtooth | 1.56e-4 | 2.00e-4 | 1.98e-4 | **1.27e-4** | 1.41e-4 | 2.18e-4 | 2.37e-4 | density |
+| pulse | 8.26e-5 | 1.23e-4 | 8.48e-5 | 9.52e-5 | 7.89e-5 | **7.28e-5** | 7.37e-5 | hindsight |
+| mixed_ood | **4.83e-3** | 1.36e-2 | 2.97e-2 | 1.58e-2 | 1.67e-2 | 3.26e-2 | 9.69e-3 | random |
 
-- `outputs/stage1c_random_matched/eval_results.json`
-- `outputs/stage1c_active_full/eval_results.json`
+**Geometric mean across all 6 OOD families:**
 
-| Model | Mean `MSE_q` | Mean `MSE_v` | Mean `MSE_total` | Max `MSE_total` | Mean max `q` error |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| random matched | 6.489e-05 | 5.366e-04 | **1.185e-04** | 2.156e-03 | 1.740e-02 |
-| active full | 9.858e-05 | 6.765e-04 | **1.662e-04** | 3.807e-03 | 2.051e-02 |
-
-### Interpretation
-
-The active collector is already worse on the easiest evaluation target:
-
-- worse mean error
-- worse tail error
-- worse peak angle error
-
-So Stage 1C must justify itself through **OOD gains**. It did not.
-
----
-
-## OOD comparison
-
-Using `outputs/stage1c_ood_compare/ood_comparison.json`:
-
-| OOD type | random matched | active full | old Stage 1B baseline | best |
-| --- | ---: | ---: | ---: | --- |
-| `chirp` | **2.156e-04** | 3.012e-04 | 3.039e-04 | random matched |
-| `step` | 3.341e-02 | **3.338e-02** | 4.710e-02 | active ~= random |
-| `random_walk` | 1.744e-02 | 2.332e-02 | **1.379e-02** | old Stage 1B |
-| `sawtooth` | **1.557e-04** | 1.996e-04 | 2.369e-04 | random matched |
-| `pulse` | 8.263e-05 | 1.229e-04 | **7.371e-05** | old Stage 1B |
-| `mixed_ood` | **4.830e-03** | 1.361e-02 | 9.691e-03 | random matched |
-
-### Ratios: active vs matched random
-
-| OOD type | `random / active` | Conclusion |
-| --- | ---: | --- |
-| `chirp` | 0.72x | active worse |
-| `step` | 1.00x | tie |
-| `random_walk` | 0.75x | active worse |
-| `sawtooth` | 0.78x | active worse |
-| `pulse` | 0.67x | active worse |
-| `mixed_ood` | 0.35x | active much worse |
-
-### Interpretation
-
-This first Stage 1C attempt does **not** beat the matched random baseline on any OOD family in a meaningful way.
-
-At best:
-
-- it ties on `step`
-
-But on the broader OOD families that matter most:
-
-- it loses on `random_walk`
-- it loses on `pulse`
-- it loses badly on `mixed_ood`
-
-That means the currently implemented disagreement score is not selecting **useful** training data; it is only selecting **uncertain** data.
+| Method | Geomean MSE |
+|---|---:|
+| **random_matched** | **1.41e-3** |
+| stage1b_scaled | 1.79e-3 |
+| low_density | 1.81e-3 |
+| hybrid_coverage | 1.86e-3 |
+| rebalance_bins | 2.06e-3 |
+| disagreement | 2.07e-3 |
+| hindsight | 2.73e-3 |
 
 ---
 
-## Why this likely failed
+## Key Research Findings
 
-The most plausible explanations are:
+### 1. The random baseline is unreasonably strong
 
-1. **Trajectory-level disagreement is too blunt.** High-disagreement trajectories may contain many chaotic or low-value transitions, not concentrated signal.
-2. **Bootstrap ensemble uncertainty is poorly calibrated early.** The ensemble was trained on only 2000 seed trajectories before ranking 12000 candidates.
-3. **The selector ignores learnability.** It prefers transitions the current ensemble disagrees on, but some of those may be intrinsically noisy or simply hard to fit with the MLP.
-4. **The proposal distribution is unchanged.** The method only reweights trajectories sampled from the same mixed rollout process; it does not truly expand the reachable frontier.
-5. **Selection is trajectory-level, not transition-level.** A few high-variance steps can pull in an entire trajectory that is otherwise unhelpful.
+With mixed action types and 10k trajectories, random rollouts achieve broad 4D
+state coverage that no selection method improves upon holistically.
+
+### 2. Selection creates a coverage-specificity tradeoff
+
+Each selector concentrates data in its target region at the expense of broad coverage:
+- **Low-density** helps `sawtooth` but hurts `mixed_ood` 3.3x
+- **Rebalance** helps `random_walk` slightly but hurts `mixed_ood` 6.2x
+- **Hybrid** helps `sawtooth`+`pulse` but hurts `mixed_ood` 3.5x
+- **Disagreement** hurts almost everything; curiosity trap
+
+### 3. Hindsight is limited by teacher quality
+
+Teacher has MSE=0.010 on mixed_ood refs. Achieved trajectories concentrate near
+the teacher's comfort zone, not in the hard regions we need.
+
+### 4. The binding constraint is likely capacity, not coverage
+
+Val losses are similar (~0.002) across methods. The data *distribution* matters
+more than visiting specific rare bins.
 
 ---
 
-## What Stage 1C established
+## Proposal Checklist
 
-This is still a useful research result.
-
-Stage 1C now establishes that:
-
-1. **A basic ensemble-disagreement collector is easy to integrate into the current codebase.**
-2. **Disagreement alone is not enough.**
-3. **The strong random-rollout baseline from Stage 1B remains hard to beat.**
-4. **Future Stage 1C work should target uncertainty-aware but also learnable or coverage-improving transitions, not just raw ensemble variance.**
+| Approach | Status | Outcome |
+|---|---|---|
+| State-space binning with rebalancing | Done | Negative |
+| Maximum entropy / low-density | Done | Negative |
+| Curiosity / ensemble disagreement | Done | Negative |
+| Hindsight relabeling | Done | Negative |
+| Adversarial reference generation | Not yet | Next candidate |
 
 ---
 
-## Recommended next fixes
+## Artifacts
 
-The next Stage 1C iteration should probably try one or more of:
+| Directory | Description |
+|---|---|
+| `outputs/stage1c_random_matched/` | Matched random baseline |
+| `outputs/stage1c_active_full/` | Disagreement active collection |
+| `outputs/stage1c_rebalance_full/` | Bin rebalancing |
+| `outputs/stage1c_density_full/` | Low-density selector |
+| `outputs/stage1c_hybrid_full/` | Hybrid coverage |
+| `outputs/stage1c_hindsight_full/` | Hindsight relabeling |
+| `outputs/stage1c_ood_*` | OOD comparison runs |
 
-1. **Transition-level selection** instead of whole-trajectory selection.
-2. **Disagreement + coverage hybrid scoring** so selected data is both novel and broad.
-3. **Disagreement + loss prediction / learnability penalty** to avoid selecting only pathological transitions.
-4. **Iterative active rounds** instead of one-shot seed → rank → retrain.
-5. **Hindsight relabeling (Stage 1D)**, which may produce more policy-relevant data than passive rollout filtering.
+---
 
-For now, the best model to carry forward is still:
+## Next Steps: Stage 1D
 
-`outputs/stage1c_random_matched/best_model.pt`
+Key insight from 1C: **reweighting existing rollout data doesn't help**.
+Stage 1D should focus on **generating qualitatively new data**:
+- Reachability-guided sampling
+- Trajectory optimization as data generator
+- Planning-based distillation (iLQR/CEM/MPPI)
 
-and more broadly, the Stage 1B-style random-rollout recipe remains stronger than this first Stage 1C active variant.
+Best model to carry forward: `outputs/stage1c_random_matched/best_model.pt`
