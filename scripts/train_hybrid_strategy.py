@@ -116,7 +116,7 @@ def eval_ood(model, cfg, device):
 
     # OOD evaluation
     for ood_type in OOD_ACTION_GENERATORS:
-        s, a = generate_ood_reference_data(cfg, ood_type, n_trajectories=200)
+        s, a = generate_ood_reference_data(cfg, 200, action_type=ood_type)
         summary = harness.evaluate_policy(policy, s, a, max_trajectories=200)
         mse = float(summary.mean_mse_total)
         results[f"ood_{ood_type}"] = mse
