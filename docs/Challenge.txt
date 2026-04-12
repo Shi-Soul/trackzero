@@ -1,4 +1,0 @@
-Challenge:
-1. Your reasoning about goldilocks principle are too simple. For the maxent_rl method, you do not test it thoroughly, e.g. in OOD setting. this is because you do not have an overall benchmark. Whatif you test it in more complex data and maxent_rl outperform the baseline?
-2. All your experiments do not tune hyperparameters. This is not a good practice. E.g. whatif larger network capacity / better network architecture / more training computation make maxent_rl perform better? 
-3. Your resource utilization is not good. You only use 1 GPU most of the time. You can use more GPUs to speed up your experiments and test more settings.
