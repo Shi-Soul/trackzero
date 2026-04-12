@@ -20,34 +20,30 @@ After the standard benchmark ranking reversal (active #1, random #4):
 | 6 | dagger_1024x4 | random+bench | 1024x4 | 3e-4 | 0 | 100x5 |
 | 7 | hp_random_1024x4_wd | random | 1024x4 | 3e-4 | 1e-5 | 200 |
 
-## Progress (Epoch ~30)
+## Progress (Epoch ~60)
 
-| Experiment | best_val | Status |
-|-----------|---------|--------|
-| hp_random_1024x6 | **0.005244** | Still improving |
-| hp_random_1024x4_wd | 0.009723 | Training |
-| hp_random_2048x3 | 0.010533 | Training |
-| hp_random_512x4_wd | 0.012935 | Training |
-| dagger_512x4 | 0.006391 | DAgger iter 0 |
-| dagger_1024x4 | 0.008362 | DAgger iter 0 |
-| hp_maxent_1024x6 | 0.126483 | Stuck |
-| hp_maxent_2048x4 | 0.127972 | Stuck |
+| Experiment | Epoch | best_val | Trend |
+|-----------|-------|---------|-------|
+| hp_random_1024x6 | 60/200 | **0.002333** | Excellent, still improving |
+| hp_random_1024x4_wd | 60/200 | **0.002630** | Strong |
+| hp_random_2048x3 | 60/200 | **0.002790** | Good |
+| hp_random_512x4_wd | 70/300 | 0.006290 | Improving slowly |
+| dagger_512x4 | 60/100 | **0.001540** | ★ BEST of all ★ |
+| dagger_1024x4 | 60/100 | **0.001681** | ★ Excellent ★ |
+| hp_maxent_1024x6 | 60/200 | 0.034639 | Improving but 15× worse |
+| hp_maxent_2048x4 | 50/200 | 0.095969 | Slowly improving, still terrible |
 
 ## Emerging Observations
 
-1. **1024x6 random is the val_loss champion** - 0.005244, below baseline (0.010)
-2. **DAgger 512x4 already at 0.0064** - excellent for a SMALLER model
-3. **All maxent models stuck at ~0.127** - capacity cannot fix bad data distribution
-4. **Weight decay helps random** - 1024x4+wd at 0.0097 vs baseline 0.010
+1. **DAgger 512x4 is the overall val_loss champion** at 0.001540
+2. **DAgger 1024x4 close behind** at 0.001681
+3. **HP-tuned random is very strong** - 1024x6 at 0.002333 (near active's benchmark 0.00186)
+4. **Maxent still terrible** - even 2048x4 (12.6M params) stuck at 0.096
+5. **Weight decay helps** - 512x4+wd improved from 0.010 to 0.006 baseline
 
-## Key Insight: Density > Coverage
+## Predictions for Standard Benchmark
 
-See density_coverage_analysis.md for the full analysis. Summary:
-- Random covers 77.5% of benchmark cells with 25,940 samples/cell
-- Maxent covers 100% but with only 12,764 samples/cell
-- Random performs 9x better despite lower coverage
-- Sample density in task-relevant cells is the key factor
-
----
-
-*Status: Training ~15% complete, ~3-4 hours remaining*
+Based on val_loss trends and the density > coverage principle:
+- DAgger models should outperform active learning (best_val 0.0015 < active's benchmark 0.0019)
+- HP random 1024x6 will be competitive with active (0.0023 val_loss)
+- Maxent will remain 10-15× worse regardless of model size
