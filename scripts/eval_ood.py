@@ -19,21 +19,31 @@ from trackzero.data.ood_references import (
     generate_ood_reference_data,
 )
 from trackzero.eval.harness import EvalHarness
+from trackzero.oracle.inverse_dynamics import InverseDynamicsOracle
 from trackzero.policy.mlp import MLPPolicy, load_checkpoint
 
 
 def evaluate_model_on_refs(
-    model_path: str,
+    model_path,
     tau_max: float,
     ref_states: np.ndarray,
     ref_actions: np.ndarray,
     harness: EvalHarness,
     max_trajectories: int = 200,
     label: str = "",
+    policy_override=None,
 ) -> dict:
-    """Evaluate a single model on given reference data."""
-    model = load_checkpoint(model_path)
-    policy = MLPPolicy(model, tau_max=tau_max)
+    """Evaluate a single model (or direct policy) on given reference data.
+
+    Args:
+        model_path: path to checkpoint, or None if policy_override is given.
+        policy_override: if provided, use this callable directly instead of loading from checkpoint.
+    """
+    if policy_override is not None:
+        policy = policy_override
+    else:
+        model = load_checkpoint(model_path)
+        policy = MLPPolicy(model, tau_max=tau_max)
 
     t0 = time.time()
     summary = harness.evaluate_policy(
@@ -44,7 +54,7 @@ def evaluate_model_on_refs(
 
     result = {
         "label": label,
-        "model_path": str(model_path),
+        "model_path": str(model_path) if model_path else "oracle",
         "n_trajectories": summary.n_trajectories,
         "mean_mse_q": summary.mean_mse_q,
         "mean_mse_v": summary.mean_mse_v,
@@ -74,12 +84,16 @@ def main():
                         help="Stage 1A (supervised) model checkpoint")
     parser.add_argument("--model-1b", type=str, default="outputs/stage1b_mixed_80k/best_model.pt",
                         help="Stage 1B (random rollout) model checkpoint")
+    parser.add_argument("--model-best", type=str, default=None,
+                        help="Optional: best model trained with optimal action distribution")
     parser.add_argument("--n-trajectories", type=int, default=500,
                         help="OOD trajectories per action type")
     parser.add_argument("--eval-trajectories", type=int, default=200,
                         help="Max trajectories to evaluate per type")
     parser.add_argument("--output-dir", type=str, default="outputs/ood_eval")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--include-oracle", action="store_true",
+                        help="Also evaluate the inverse-dynamics oracle (shooting) as upper bound")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -96,6 +110,10 @@ def main():
         models["1B_random_rollout"] = args.model_1b
     else:
         print(f"WARNING: 1B model not found at {args.model_1b}")
+    if args.model_best and Path(args.model_best).exists():
+        models["1B_best_dist"] = args.model_best
+    elif args.model_best:
+        print(f"WARNING: best model not found at {args.model_best}")
 
     if not models:
         print("No models found. Exiting.")
@@ -121,6 +139,22 @@ def main():
         print(f"  Done in {time.time() - t0:.1f}s")
 
         type_results = {}
+
+        # Optionally evaluate oracle as upper bound
+        if args.include_oracle:
+            oracle = InverseDynamicsOracle(cfg)
+            oracle_policy = oracle.as_policy(mode="shooting")
+            result, summary = evaluate_model_on_refs(
+                None, cfg.pendulum.tau_max,
+                ref_states, ref_actions,
+                harness,
+                max_trajectories=args.eval_trajectories,
+                label=f"oracle on {ood_type}",
+                policy_override=oracle_policy,
+            )
+            type_results["oracle"] = result
+            summary.to_json(output_dir / f"{ood_type}_oracle_details.json")
+
         for model_name, model_path in models.items():
             result, summary = evaluate_model_on_refs(
                 model_path, cfg.pendulum.tau_max,
@@ -136,35 +170,54 @@ def main():
 
         all_results[ood_type] = type_results
 
-        # Print comparison
-        if len(models) == 2:
-            names = list(type_results.keys())
-            r0, r1 = type_results[names[0]], type_results[names[1]]
-            ratio = r0["mean_mse_total"] / max(r1["mean_mse_total"], 1e-20)
-            print(f"\n  Ratio ({names[0]} / {names[1]}): {ratio:.2f}x")
+        # Print live comparison
+        names_all = list(type_results.keys())
+        for i, n0 in enumerate(names_all):
+            for n1 in names_all[i+1:]:
+                v0 = type_results[n0]["mean_mse_total"]
+                v1 = type_results[n1]["mean_mse_total"]
+                ratio = v0 / max(v1, 1e-20)
+                print(f"\n  {n0}/{n1} ratio: {ratio:.2f}x")
 
     # Summary table
-    print(f"\n{'='*80}")
-    print("SUMMARY TABLE")
-    print(f"{'='*80}")
+    all_names = []
+    for ood_type in ood_types:
+        for n in all_results[ood_type]:
+            if n not in all_names:
+                all_names.append(n)
+
+    print(f"\n{'='*100}")
+    print("SUMMARY TABLE (mean MSE_total)")
+    print(f"{'='*100}")
+    col_w = 18
     print(f"{'OOD Type':<15}", end="")
-    for name in models:
-        print(f"  {name:>20s}", end="")
-    if len(models) == 2:
-        print(f"  {'Ratio (1A/1B)':>15s}", end="")
+    for name in all_names:
+        print(f"  {name:>{col_w}s}", end="")
+    # ratio columns: 1A/oracle, 1B/oracle, 1A/1B
+    if "oracle" in all_names and "1A_supervised" in all_names:
+        print(f"  {'1A/oracle':>12s}", end="")
+    if "oracle" in all_names and "1B_random_rollout" in all_names:
+        print(f"  {'1B/oracle':>12s}", end="")
+    if "1A_supervised" in all_names and "1B_random_rollout" in all_names:
+        print(f"  {'1A/1B':>10s}", end="")
     print()
-    print("-" * 80)
+    print("-" * 100)
 
     for ood_type in ood_types:
+        tr = all_results[ood_type]
         print(f"{ood_type:<15}", end="")
-        vals = []
-        for name in models:
-            v = all_results[ood_type][name]["mean_mse_total"]
-            vals.append(v)
-            print(f"  {v:>20.6e}", end="")
-        if len(vals) == 2:
-            ratio = vals[0] / max(vals[1], 1e-20)
-            print(f"  {ratio:>15.2f}x", end="")
+        for name in all_names:
+            v = tr.get(name, {}).get("mean_mse_total", float("nan"))
+            print(f"  {v:>{col_w}.4e}", end="")
+        if "oracle" in tr and "1A_supervised" in tr:
+            r = tr["1A_supervised"]["mean_mse_total"] / max(tr["oracle"]["mean_mse_total"], 1e-20)
+            print(f"  {r:>12.2f}x", end="")
+        if "oracle" in tr and "1B_random_rollout" in tr:
+            r = tr["1B_random_rollout"]["mean_mse_total"] / max(tr["oracle"]["mean_mse_total"], 1e-20)
+            print(f"  {r:>12.2f}x", end="")
+        if "1A_supervised" in tr and "1B_random_rollout" in tr:
+            r = tr["1A_supervised"]["mean_mse_total"] / max(tr["1B_random_rollout"]["mean_mse_total"], 1e-20)
+            print(f"  {r:>10.2f}x", end="")
         print()
 
     # Save all results

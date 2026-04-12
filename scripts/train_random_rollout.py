@@ -24,8 +24,12 @@ def main():
     parser.add_argument("--n-trajectories", type=int, default=80000)
     parser.add_argument("--action-type", type=str, default="mixed",
                         choices=["uniform", "gaussian", "ou", "bangbang", "multisine", "mixed"])
+    parser.add_argument("--action-params-json", type=str, default=None,
+                        help="JSON string of action hyperparameters, e.g. "
+                             "'{\"theta\": 0.05, \"sigma\": 3.0}' for ou")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=8192)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=512)
     parser.add_argument("--n-hidden", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -33,13 +37,17 @@ def main():
     parser.add_argument("--eval-trajectories", type=int, default=200)
     args = parser.parse_args()
 
+    action_params = json.loads(args.action_params_json) if args.action_params_json else None
+
     cfg = load_config(args.config)
 
     # Generate random rollout data
-    print(f"Generating {args.n_trajectories} random rollout trajectories ({args.action_type})...")
+    print(f"Generating {args.n_trajectories} random rollout trajectories "
+          f"({args.action_type}, params={action_params})...")
     t0 = time.time()
     train_states, train_actions = generate_random_rollout_data(
         cfg, args.n_trajectories, action_type=args.action_type, seed=args.seed,
+        action_params=action_params,
     )
     elapsed = time.time() - t0
     print(f"  Done in {elapsed:.1f}s")
@@ -58,7 +66,7 @@ def main():
         hidden_dim=args.hidden_dim,
         n_hidden=args.n_hidden,
         batch_size=args.batch_size,
-        lr=1e-3,
+        lr=args.lr,
         epochs=args.epochs,
         seed=args.seed,
         output_dir=args.output_dir,
@@ -85,7 +93,11 @@ def main():
     with open(meta_path, "w") as f:
         json.dump({
             "action_type": args.action_type,
+            "action_params": action_params,
             "n_trajectories": args.n_trajectories,
+            "hidden_dim": args.hidden_dim,
+            "n_hidden": args.n_hidden,
+            "epochs": args.epochs,
             "best_val_loss": min(l.val_loss for l in logs),
             "final_val_loss": logs[-1].val_loss,
         }, f, indent=2)

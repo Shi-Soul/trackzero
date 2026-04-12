@@ -9,7 +9,8 @@ description = "Learning whole-body tracking policies from physics alone"
 requires-python = ">=3.10"
 dependencies = [
     "mujoco>=3.4.0",
-    "torch>=2.5.1",
+    "torch>=2.5.1,<2.7",
+
     "numpy>=1.26",
     "matplotlib>=3.10",
     "h5py",
@@ -21,3 +22,11 @@ dev = ["pytest", "pytest-timeout"]
 
 [tool.setuptools.packages.find]
 include = ["trackzero*"]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }

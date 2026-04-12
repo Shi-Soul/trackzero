@@ -50,6 +50,8 @@ def main():
                         help="Which ablation to run")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=8192)
+    parser.add_argument("--n-train", type=int, default=None,
+                        help="Override number of training trajectories (default varies by ablation)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--eval-trajectories", type=int, default=100)
@@ -92,10 +94,10 @@ def main():
     all_results = []
 
     if args.ablation == "capacity":
-        # Fix data: 80k mixed random rollouts
-        print("Generating 80k mixed random rollout data...")
+        n_cap = args.n_train or 80000
+        print(f"Generating {n_cap} mixed random rollout data...")
         t0 = time.time()
-        train_s, train_a = generate_random_rollout_data(cfg, 80000, "mixed", seed=0, use_gpu=args.gpu_sim, gpu_device=args.gpu_device)
+        train_s, train_a = generate_random_rollout_data(cfg, n_cap, "mixed", seed=0, use_gpu=args.gpu_sim, gpu_device=args.gpu_device)
         print(f"  Done in {time.time()-t0:.1f}s")
 
         configs = [
@@ -162,7 +164,12 @@ def main():
 
     elif args.ablation == "datasize":
         # Fix architecture: 512x4
-        sizes = [5000, 10000, 20000, 40000, 80000]
+        if args.n_train:
+            max_size = args.n_train
+            sizes = [max_size // 8, max_size // 4, max_size // 2, max_size]
+            sizes = sorted(set(s for s in sizes if s >= 100))
+        else:
+            sizes = [5000, 10000, 20000, 40000, 80000]
 
         for n_traj in sizes:
             print(f"\n{'='*60}")
@@ -219,16 +226,17 @@ def main():
             print(f"    OOD MSE_total: {ood_result['mean_mse_total']:.6e}")
 
     elif args.ablation == "action_type":
-        # Fix architecture and data size: 512x4, 80k
+        # Fix architecture and data size: 512x4
+        n_act = args.n_train or 80000
         action_types = ["uniform", "gaussian", "ou", "bangbang", "multisine", "mixed"]
 
         for atype in action_types:
             print(f"\n{'='*60}")
-            print(f"Training with {atype} actions")
+            print(f"Training with {atype} actions ({n_act} trajectories)")
             print(f"{'='*60}")
 
             t0 = time.time()
-            train_s, train_a = generate_random_rollout_data(cfg, 80000, atype, seed=0, use_gpu=args.gpu_sim, gpu_device=args.gpu_device)
+            train_s, train_a = generate_random_rollout_data(cfg, n_act, atype, seed=0, use_gpu=args.gpu_sim, gpu_device=args.gpu_device)
             print(f"  Generated in {time.time()-t0:.1f}s")
 
             train_cfg = TrainingConfig(
