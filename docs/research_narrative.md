@@ -32,6 +32,25 @@ Top 10:
 | 9 | hindsight | 8.13e-3 | Stage 1C |
 | 10 | ablation n5k | 1.12e-2 | Ablation |
 
+## Theoretical Lower Bound (Oracle)
+
+The finite-difference inverse dynamics oracle (mj_inverse) establishes the performance floor:
+
+| Family | Oracle | Active MLP | Gap |
+|--------|--------|-----------|-----|
+| multisine | 1.01e-4 | 1.71e-4 | 1.7× |
+| chirp | 3.16e-4 | 3.11e-4 | 1.0× |
+| step | 3.25e-4 | 7.64e-3 | **23.5×** |
+| random_walk | 4.49e-5 | 2.76e-3 | **61.6×** |
+| sawtooth | 1.93e-4 | 1.20e-4 | 0.6× |
+| pulse | 1.29e-4 | 1.40e-4 | 1.1× |
+| **AGGREGATE** | **1.85e-4** | **1.86e-3** | **10.0×** |
+
+Key takeaway: easy families are at oracle level (gap ≤ 2×).
+The entire 10× aggregate gap is concentrated on step (23×) and random_walk (62×).
+Step and random_walk are NOT inherently hard (oracle MSE ~3e-4 and ~4e-5).
+The gap is 100% from MLP approximation error on extreme state excursions.
+
 ## Key Findings
 
 ### 1. Coverage Predicts Performance (r = −0.946)
@@ -71,19 +90,39 @@ Benchmark error decomposes as:
 
 Optimal data allocation: p_train(c) ∝ p_bench(c) · difficulty(c)
 
-## Running Experiments (epoch ~60)
+## Running Experiments (epoch ~70 update)
 
-| Experiment | best_val | Prediction |
-|-----------|---------|-----------|
-| hp_random_1024x6 | 0.00233 | May beat active on benchmark |
-| hp_random_1024x4_wd | 0.00263 | Competitive |
-| hp_random_2048x3 | 0.00279 | Good |
-| dagger_512x4 | 0.00154 | **Likely new champion** |
-| hp_maxent_1024x6 | 0.03464 | Still 15× worse |
-| hp_maxent_2048x4 | 0.09597 | Hopeless |
+| Experiment | best_val | Status |
+|-----------|---------|--------|
+| **hp_random_1024x6** | **0.001675** | ★ Below active benchmark! |
+| hp_random_1024x4_wd | 0.002366 | Still improving |
+| hp_random_2048x3 | 0.002790 | Steady |
+| hp_random_512x4_wd | 0.006290 | Slow convergence |
+| **dagger_512x4** | **0.001540** | ★ Best val_loss overall |
+| dagger_1024x4 | 0.001681 | Excellent |
+| hp_maxent_1024x6 | 0.034639 | Hopeless (15× worse) |
+| hp_maxent_2048x4 | >0.095 | Still no epochs logged |
+
+### New Finding: Error Concentration
+
+Active learning model: top 10 of 100 step trajectories = 85.7% of step error.
+Root cause: q2 excursions beyond training range (q2_max up to 25.5 vs training max 14.3).
+
+Fixing 10 worst step + 10 worst random_walk trajectories → 78.9% aggregate improvement.
+Theoretical floor (all at median): 1.37e-4 (13.5× below current best).
+
+This explains DAgger's success: benchmark-focused data targets exactly these hard states.
+
+### New Finding: Capacity Closes the Gap
+
+hp_random_1024x6 (epoch 70): val_loss 0.001675 < active benchmark 0.001858.
+→ Random data + large model (4.7M params) ≈ active learning + default model (1.3M params).
+→ Implications: data quality matters, but so does model capacity. The "best" strategy
+  depends on the compute-capacity tradeoff.
 
 ## Open Questions
 
-1. Will DAgger beat active on standard benchmark?
-2. Can HP-tuned random match active?
-3. Is importance-weighted resampling better than uniform training?
+1. Will DAgger beat active on standard benchmark? (val_loss says YES)
+2. Does hp_random_1024x6's val_loss advantage translate to benchmark? 
+3. Does DAgger improve across iterations or plateau at iter 0?
+4. What's the cost-performance Pareto frontier (data quality × model capacity)?
