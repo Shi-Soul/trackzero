@@ -1,49 +1,65 @@
 # TRACK-ZERO Roadmap Status
 
+_Last updated after Stage 1B/1C experiments._
+
 ## Current status
 
-This repo has a **solid Stage 0 / Stage 1 scaffold**, but it is **not yet in a runnable research state**.
+**Stage 0 and Stage 1A/1B are complete; Stage 1C has an initial negative-result pass.**
 
-- **Implemented well:** MuJoCo double-pendulum simulator, inverse-dynamics oracle, evaluation harness, MLP policy/training core, plotting/playback helpers, GPU simulator prototype.
-- **Partially implemented:** Stage 1 script layer exists for **1A supervised**, **1B random rollout**, **OOD eval**, and **1E ablations**.
-- **Missing / blocking:** the whole `trackzero.data.*` package referenced by scripts and tests is absent (`multisine`, `dataset`, `generator`, `random_rollout`, `ood_references`), so the data path is broken end-to-end.
-- **Environment baseline after `uv sync --extra dev`:** core packages now install successfully, but test collection still fails because `trackzero.data` is missing and the GPU path imports `mujoco_warp`, which is not declared as a project dependency.
-- **Experiment evidence missing:** there is currently no `data/`, `outputs/`, or saved evaluation artifact in the repo, so no stage completion claim is backed by results yet.
+- **Stage 0 ✅**: Data pipeline, oracle, training loop, evaluation harness — all working. Multisine reference dataset generated; supervised baseline trained and benchmarked. Results in `docs/stage0_results.md`.
+- **Stage 1A ✅**: Supervised inverse-dynamics MLP trained on 10k multisine trajectories (512×4, 100 epochs, GPU). ID MSE 1.22e-4. Results in `docs/stage1_results.md`.
+- **Stage 1B ✅**: Random-rollout self-supervised dataset; coverage analysis, action-type and data-scaling ablations, OOD evaluation, learning curves. Results in `docs/stage_1b.md`.
+- **Stage 1C ⚠️**: First active-collection pass implemented with ensemble disagreement. End-to-end pipeline works, but did not beat the strong random-rollout baseline. Results in `docs/stage_1c.md`.
+- **Stage 1D 🧪**: Hindsight relabeling prototype scripts added, but no scaled experiment result is committed yet.
+- **Stage 1E**: Ablation scripts exist; not complete at full scale.
+- **Stage 2–4**: Not yet implemented.
 
 ## Progress estimate
 
-These are rough engineering-progress estimates from the current repository state:
-
 | Scope | Estimate | Notes |
-| --- | --- | --- |
-| **Overall roadmap (Stage 0-4)** | **~10-15%** | Mostly early infrastructure and research scaffolding; later stages are not present. |
-| **Stage 0** | **~50-60%** | Simulator/oracle/eval core exists, but dataset generation/loading and reproducible completion evidence are missing. |
-| **Stage 1** | **~15-25%** | Training/eval scripts are drafted, but the shared data pipeline is missing, so 1A/1B/1E are not actually executable end-to-end yet. |
-| **Stage 2-4** | **~0%** | No implementation found. |
+|-------|---------|-------|
+| **Overall roadmap (Stage 0-4)** | **~35%** | Stage 0 and the first full Stage 1 research passes are in place. |
+| **Stage 0** | **~100%** | Full pipeline + baseline results. |
+| **Stage 1A** | **~100%** | Supervised model trained, evaluated, learning curves. |
+| **Stage 1B** | **~100%** | Coverage, ablations, OOD eval, analysis doc written. |
+| **Stage 1C** | **~50%** | First disagreement-based pass implemented and evaluated; result negative, iteration still needed. |
+| **Stage 1D** | **~20%** | Hindsight relabeling prototype and training entrypoint exist; no committed result doc yet. |
+| **Stage 1E** | **~50%** | Ablation scripts exist; capacity ablation not run at scale. |
+| **Stage 2–4** | **~0%** | No implementation. |
+
+## Key experimental results
+
+### Stage 1A vs 1B (10k traj, 100 epochs, 512×4 MLP)
+
+| Metric | Stage 1A (supervised) | Stage 1B (random rollout) |
+|--------|----------------------|--------------------------|
+| ID MSE total | **1.22e-4** | 1.76e-4 |
+| OOD step MSE | 1.50e-1 | **4.71e-2** (3.2× better) |
+| OOD random_walk MSE | 1.18e-1 | **1.38e-2** (8.5× better) |
+| Val loss | 0.0357 | 0.0424 |
+
+### Stage 1B coverage (no attractor concentration)
+All action types achieve >87% q-space coverage on 50×50 grid. `mixed` recommended for best OOD performance.
+
+### Data scaling (mixed, 40 ep): ID MSE ∝ n^{−1.1}
+1250 traj → 1.51e-2 · 2500 → 4.89e-3 · 5000 → 2.09e-3 · 10000 → 8.24e-4
 
 ## What is done vs. what remains
 
-### Done
-
+### Done ✅
 1. Double-pendulum dynamics and MuJoCo wrapper.
-2. Inverse-dynamics oracle with exact/shooting-style recovery.
-3. Tracking evaluation harness and core metrics.
-4. Basic inverse-dynamics MLP training loop.
-5. Stage-labeled entry scripts for supervised/random-rollout/ablation/OOD evaluation.
+2. Inverse-dynamics oracle.
+3. Full data pipeline (`trackzero.data.*` package).
+4. Stage 0 supervised baseline + evaluation.
+5. Stage 1A supervised training (10k/100ep).
+6. Stage 1B: coverage analysis, action-type ablation, data-size ablation, OOD eval.
+7. GPU training support (torch 2.5.1+cu124, 8× RTX 3080 Ti).
+8. Visualization: learning curves, coverage grids, rollout vs reference trajectories.
 
-### Remaining before Stage 0 can be considered complete
+### Short-term todo list
 
-1. Recreate the missing `trackzero.data` package.
-2. Make dataset generation/loading work end-to-end.
-3. Decide whether GPU simulation is required now; if yes, add and validate the `mujoco_warp` dependency path.
-4. Produce coverage statistics/plots for the multisine reference set.
-5. Run and save oracle/open-loop validation results.
-6. Generate reproducible baseline artifacts under `data/` and `outputs/`.
-
-## Short-term todo list
-
-1. **Restore the data layer first.** Implement or recover `trackzero.data.multisine`, `dataset`, `generator`, `random_rollout`, and `ood_references`; until this exists, most scripts/tests cannot run.
-2. **Repair the post-sync test baseline.** After `uv sync --extra dev`, fix the current collection blockers: missing `trackzero.data` and missing `mujoco_warp` for GPU tests.
-3. **Close Stage 0 with a small reproducible run.** Generate a tiny train/test dataset, verify oracle/open-loop evaluation, and save a minimal coverage report.
-4. **Make Stage 1A actually executable.** Train the supervised baseline on the generated dataset and save checkpoint + eval JSON.
-5. **Only then compare Stage 1B.** Train random-rollout baseline, run OOD evaluation, and use those outputs to decide whether Stage 1C/1D work is justified.
+1. **Stage 1C second pass.** Replace raw trajectory-level disagreement with transition-level or hybrid learnable-coverage selectors.
+2. **Stage 1D experiment run.** Use the hindsight pipeline to test whether achieved-trajectory relabeling beats the Stage 1B baseline on broader OOD families.
+3. **Stage 1E — network capacity ablation at scale.** Current ablations are still smaller than the main Stage 1A/1B runs.
+4. **Investigate failure modes.** The bimodal OOD error distribution (low median, high max) suggests some trajectories trigger chaotic rollouts. Curriculum or trajectory filtering may help.
+5. **Stage 2 — begin design.** Define the infeasible-reference setting and its optimization baseline before adding training code.
