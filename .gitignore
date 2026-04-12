@@ -5,8 +5,8 @@ __pycache__/
 dist/
 build/
 .eggs/
-data/
-outputs/
+/data/
+/outputs/
 *.h5
 *.hdf5
 *.mp4
