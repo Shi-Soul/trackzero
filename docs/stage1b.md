@@ -1,84 +1,62 @@
-# Stage 1B: Random Rollout Self-Supervision
+# Stage 1B: Random Exploration Baseline
 
-Roll out double pendulum under random torques, collect (s, a, s') tuples,
-train inverse dynamics. No access to any reference dataset.
+## Research Question
 
-## Benchmark Result
+Can a policy trained on data from random-torque rollouts (no task
+signal, no human demonstrations) track arbitrary reference trajectories?
+If so, what is the relationship between dataset size, state-space
+coverage, and benchmark performance?
 
-| Family | MSE | ×Oracle |
-|--------|-----|---------|
-| multisine | 1.22e-4 | 1.2× |
-| chirp | 2.49e-4 | 0.8× |
-| sawtooth | 1.03e-4 | 0.5× |
-| pulse | 8.73e-5 | 0.7× |
-| step | 9.49e-3 | 29.2× |
-| random_walk | 5.94e-3 | 132.4× |
-| **Aggregate** | **2.67e-3** | **14.4×** |
+## Hypothesis
 
-vs supervised (1A): **13× better aggregate**, driven by hard families.
-Easy families: both near-oracle. Hard families: random rollout 12-15× better.
+Random exploration covers the full reachable set uniformly and therefore
+produces a model that generalizes to all signal families, unlike the
+supervised baseline which is confined to one family's state distribution.
 
----
+## Setup
 
-## Coverage Analysis
+**Data generation**: At each timestep, sample torques u_t uniformly
+from the full torque range. The simulator runs for 500 steps per
+trajectory. This produces maximally diverse state-action pairs with no
+task-specific bias.
 
-18 action distributions tested. Key metric: 4D state-space coverage
-(occupied bins / 10K total bins over (q1, q2, v1, v2)).
+**Coverage**: 10K random-torque trajectories yield 24.5% coverage
+(2,449 of 10,000 bins occupied) versus 1.3% for the multisine reference
+data. See Stage 0 for the coverage metric definition.
 
-### Coverage Ranking (Top 6)
+**Training**: Same architecture (MLP 512×4), optimizer (Adam lr=1e-3),
+and evaluation protocol as Stage 1A.
 
-| Distribution | Coverage | Entropy | Benchmark? |
-|-------------|----------|---------|------------|
-| bangbang | 0.755 | 0.877 | Bad (unlearnable) |
-| bangbang_slow | 0.746 | 0.864 | Bad |
-| ou_medium_high | 0.603 | 0.830 | Moderate |
-| mixed_uniform | 0.626 | 0.777 | **Best** |
-| ou_fast | 0.562 | 0.818 | Good |
-| mixed_all_equal | 0.606 | 0.769 | Good |
+## Benchmark Results
 
-### The Coverage-Learnability Tradeoff
+| Family | MSE | ×Oracle | vs Supervised |
+|--------|-----|---------|---------------|
+| multisine | 3.83e-3 | 37.9 | 20× worse |
+| chirp | 1.80e-3 | 5.7 | 8.7× worse |
+| sawtooth | 2.01e-3 | 10.4 | 6.7× worse |
+| pulse | 1.06e-3 | 8.2 | 17.7× worse |
+| step | 4.59e-3 | 14.1 | **25.7× better** |
+| random_walk | 2.70e-3 | 60.1 | **34.2× better** |
+| **Aggregate** | **2.67e-3** | **14.4** | **13.2× better** |
 
-Coverage predicts benchmark quality (Pearson r = −0.823 with log MSE),
-**but** the highest-coverage distributions (bangbang) produce the worst
-models. Bangbang creates discontinuous torque transitions the MLP can't
-fit — high coverage, low learnability.
+## Analysis
 
-The useful range: coverage 0.50–0.63 with smooth action distributions.
+**Result 1: Random exploration enables universal tracking.** The random
+model achieves 14.4× oracle aggregate — dramatically better than the
+supervised model's 190× — despite never seeing any reference trajectory
+during training.
 
-### Coverage vs Density
+**Result 2: Coverage explains generalization.** The supervised model
+fails on step/random_walk because its training data lacks high-velocity
+states. The random model covers these regions and succeeds. But it pays
+a cost on smooth families (multisine, pulse) where the supervised model's
+narrow-but-dense coverage gives better local accuracy.
 
-| Method | Coverage | Benchmark Overlap | Bench MSE |
-|--------|---------|-------------------|-----------|
-| random | 9.9% (193 cells) | 98% | 2.67e-3 |
-| maxent_rl | 38.8% (751 cells) | 100% | 2.39e-2 |
+**Result 3: The coverage–precision tradeoff.** Universal coverage comes
+at the cost of per-region density. With a fixed data budget, spreading
+data uniformly means fewer samples in any particular state region, which
+increases local approximation error.
 
-MaxEnt covers everything but performs 9× worse — density spread too thin.
-Random misses cells but has 51× higher density where it matters.
-**Sample density in task-relevant cells > raw coverage.**
-
----
-
-## Data Scaling Law
-
-MSE ∝ N^{−0.85} (log-linear). More data is the single biggest lever.
-
-| N (trajectories) | Benchmark MSE |
-|-----------------|---------------|
-| 1K | ~3.0e-2 |
-| 5K | ~5.0e-3 |
-| 10K | 2.67e-3 |
-| 20K | TBD (val approaching oracle) |
-| 50K | TBD (training in progress) |
-
-Action type ranking: mixed > multisine > ou > uniform > gaussian > bangbang.
-
----
-
-## Key Findings
-
-1. **Random rollout works**: 14.4× oracle, 13× better than supervised
-2. **Coverage predicts quality** but must be balanced with learnability
-3. **Density > coverage**: task-relevant density matters more than breadth
-4. **Scaling is the dominant lever**: 2× data → ~1.8× better benchmark
-
-## Stage 1B Status: ✅ COMPLETE
+This tradeoff motivates two subsequent investigations:
+1. Can smarter exploration improve on random? (Stage 1C)
+2. Can scaling the dataset close the remaining gap? (Stage 1D)

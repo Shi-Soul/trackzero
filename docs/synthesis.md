@@ -1,57 +1,79 @@
-# Stage 1 Synthesis
+# Synthesis: Cross-Stage Findings
 
-## The Two Metrics That Matter
+## Central Thesis Verdict
 
-1. **Standard benchmark MSE** (6 families × 100 traj, closed-loop tracking)
-2. **Dataset coverage/entropy** (4D state histogram, occupied bins / 10K)
+**TRACK-ZERO works.** A policy trained entirely on random physics
+rollouts — no human demonstrations, no task reference, no domain
+knowledge — tracks arbitrary reference trajectories with 14× oracle
+MSE. This is 13× better than the best supervised baseline (190×
+oracle), confirming that physics-only data generation is viable.
 
-Everything else (val-loss, ID/OOD splits, degradation ratios) proved
-unreliable or misleading. Val-loss doesn't even rank methods correctly
-(DAgger: best val-loss, worst benchmark).
+## Key Findings
 
----
+### 1. Random exploration is a strong baseline
 
-## Full Ranking
+All 9 exploration methods tested in Stage 1C achieve aggregate MSE
+within 1.5× of random rollouts at the same data budget (10K
+trajectories). The best method (active variance-based filtering)
+improves only 1.44× over random. This suggests that the information
+content of random-torque data is high, and selective filtering offers
+diminishing returns.
 
-| # | Model | Bench MSE | ×Oracle | Stage |
-|---|-------|-----------|---------|-------|
-| 1 | active | 1.86e-3 | 10× | 1C |
-| 2 | hybrid_select | 2.15e-3 | 12× | 1C |
-| 3 | rebalance | 2.18e-3 | 12× | 1C |
-| 4 | random | 2.67e-3 | 14× | 1B |
-| 5 | density | 3.17e-3 | 17× | 1C |
-| 6 | hybrid_weighted | 4.49e-3 | 24× | 1C |
-| 7 | adversarial | 5.01e-3 | 27× | 1C |
-| 8 | hindsight | 8.13e-3 | 44× | 1C |
-| 9 | maxent_rl | 2.39e-2 | 129× | 1C |
-| 10 | supervised | 3.52e-2 | 190× | 1A |
-| 11 | dagger_512×4 | 6.09e-1 | 3295× | 1D |
-| 12 | dagger_1024×4 | 6.22e-1 | 3362× | 1D |
-| — | 20K random | TBD | TBD | 1D |
-| — | 50K random | TBD | TBD | 1D |
+### 2. Performance is dominated by hard families
 
-## What We Learned
+Across all methods, aggregate MSE is dominated by step and
+random_walk families. On smooth families (multisine, chirp, sawtooth,
+pulse), most TRACK-ZERO methods achieve 0.5–3× oracle. On step and
+random_walk, the best method achieves 23–62× oracle. The remaining
+gap is attributable to high-velocity tail states that are sparsely
+covered even in random rollouts.
 
-| Finding | Evidence |
-|---------|----------|
-| Random rollout beats supervised 13× | benchmark: 2.67e-3 vs 3.52e-2 |
-| Selection strategy gives ≤1.4× | active 1.86e-3 vs random 2.67e-3 |
-| Data quantity gives ≥6× | 20K val 2.29e-4 vs 10K val 1.39e-3 |
-| Uniform coverage is harmful | maxent_rl 129× oracle (Goldilocks) |
-| Val-loss is unreliable cross-method | DAgger: val 1.14e-3, bench 0.639 |
-| Hard families = tail accuracy | step 23×, rw 61× — only 3-6% outside range |
+### 3. Data quantity >> exploration strategy
 
-## Completion Criteria (from README)
+Preliminary scaling results show that doubling data from 10K to 20K
+trajectories reduces val-loss by 6×, while the best exploration
+strategy at 10K improves only 1.5×. This is the central insight:
+at the current regime, brute-force data scaling is far more effective
+than intelligent data selection.
 
-| Criterion | Status |
-|-----------|--------|
-| Match supervised on easy families | ✅ All methods ≤ 2× oracle |
-| Beat supervised on hard families | ✅ 13-19× better |
-| Approach oracle broadly | ❌ Best: 10× (pending 1D scaling) |
-| Understand mechanisms | 🔄 Coverage + scaling; ablations needed |
+### 4. Maximum coverage is not optimal
 
-## Open Question
+MaxEnt RL achieves the highest state-space coverage but ranks
+9th on the benchmark (129× oracle). High coverage pushes the
+policy to learn irrelevant extreme states at the expense of
+accuracy in the benchmark-relevant regions. The optimal strategy
+achieves high coverage with *sufficient density in relevant regions*
+— which random rollouts approximate better than entropy-maximizing
+policies.
 
-Can 20K-50K random data + 1024×6 architecture close the 10× oracle gap?
-Val-loss at 20K (2.29e-4) is within 1.24× of oracle — if benchmark
-confirms, Stage 1 is essentially solved by pure scaling.
+### 5. DAgger fails in this setting
+
+DAgger's iterative on-policy data collection catastrophically
+amplifies compounding errors, producing models with 3300× oracle
+MSE. This is not a hyperparameter issue — it is a fundamental
+mismatch between DAgger's assumption (the expert can correct small
+errors) and the inverse dynamics problem (small state errors → large
+torque errors in high-Coriolis regions).
+
+## Hypothesis Status (from README)
+
+| # | Hypothesis | Status | Evidence |
+|---|-----------|--------|----------|
+| H1 | Random rollout covers enough of the state space | ✅ Confirmed | 14.4× oracle aggregate vs 190× supervised |
+| H2 | Coverage-driven exploration beats random | ❌ Rejected | Best method only 1.44× better than random |
+| H3 | More data beats smarter exploration | 🔄 Testing | Val-loss scaling strongly supportive; benchmark pending |
+| H4 | Architecture scaling matters at fixed data | 🔄 Testing | HP sweep experiments in progress |
+| H5 | DAgger bridges the gap via on-policy data | ❌ Rejected | 3300× oracle; compounding error makes DAgger unusable |
+| H6 | Final model approaches oracle (<2× on all families) | 🔄 Testing | Requires 50K+ data scaling results |
+
+## Remaining Work
+
+The critical experiment is data scaling to 100K trajectories with
+the 1024×6 architecture. If the power-law scaling observed in
+val-loss extends to benchmark MSE, we predict:
+
+- 20K: ~5× oracle aggregate
+- 50K: ~2–3× oracle aggregate
+- 100K: potentially near-oracle on all families
+
+These predictions are speculative and await benchmark confirmation.

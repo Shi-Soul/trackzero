@@ -1,29 +1,22 @@
-# Current Status
+# Experiment Status
 
-## Running Experiments
+## Active Experiments
 
-| GPU | Experiment | Progress |
-|-----|-----------|----------|
-| 0 | hp_random_1024×6 | ep170/200 |
-| 1 | random_50k (1024×6) | ep1/200 |
-| 5 | dagger_1024×6 | iter0 ep1 |
+| GPU | Experiment | Config | Status |
+|-----|-----------|--------|--------|
+| 0 | random_20k_1024x6 | 20K traj, 1024×6, lr=3e-4 | Data gen → training |
+| 3 | random_50k_1024x6_v2 | 50K traj, 1024×6, lr=3e-4 | Data gen → training |
+| 5 | random_100k_1024x6 | 100K traj, 1024×6, lr=3e-4 | Data gen → training |
+| 7 | standard_benchmark_v3 | All models with checkpoints | Evaluating |
 
-## Needs Restart
+## Completed Results
 
-- **20K random**: crashed (NFS error). Star experiment — val approaching oracle.
+See `outputs/standard_benchmark_v2.json` for the 13-model benchmark.
+Top result: active at 10.0× oracle (1.86e-3 aggregate MSE).
 
-## Pending Benchmarks
+## Next Steps
 
-When training completes, run `scripts/standard_benchmark.py` on:
-hp_random_1024×6, random_20k, random_50k, dagger iterations.
-
-## Stage Progress
-
-| Stage | Status |
-|-------|--------|
-| 0 | ✅ Complete |
-| 1A | ✅ Supervised baseline |
-| 1B | ✅ Random rollout |
-| 1C | ✅ 9 methods benchmarked |
-| 1D | 🔄 Scaling experiments |
-| 1E | ❌ Needs 1D results |
+1. When 20K/50K/100K training completes → benchmark all three
+2. Plot data-scaling curve: benchmark MSE vs N_trajectories
+3. If scaling closes the gap → write Stage 1E conclusion
+4. If not → investigate architecture ablations at 100K data
