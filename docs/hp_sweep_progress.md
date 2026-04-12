@@ -1,95 +1,53 @@
-# Hyperparameter Sweep — Design & Early Results
+# HP Sweep & DAgger Experiments - Round 2
 
 ## Motivation
 
-Three critiques drove this experiment:
-1. **Maxent RL untested with larger capacity** — 82.6× worse on ID, but could capacity close the gap?
-2. **No HP tuning done** — all prior experiments used default 512×4 architecture
-3. **Underutilized resources** — only 1 of 8 GPUs used previously
+After the standard benchmark ranking reversal (active #1, random #4):
+1. Can larger models close the active-random gap? HP tuning never done.
+2. Is maxent data fundamentally limited? Or just needs more capacity?
+3. Can DAgger (task-focused augmentation) beat active learning?
 
-## Experiment Design
+## Experiment Design (8 GPUs)
 
-### Architecture Sweep
+| GPU | Name | Data | Arch | LR | WD | Epochs |
+|-----|------|------|------|----|----|--------|
+| 0 | hp_random_1024x6 | random | 1024x6 | 3e-4 | 0 | 200 |
+| 1 | hp_random_2048x3 | random | 2048x3 | 3e-4 | 0 | 200 |
+| 2 | hp_random_512x4_wd | random | 512x4 | 1e-4 | 1e-5 | 300 |
+| 3 | hp_maxent_1024x6 | maxent | 1024x6 | 3e-4 | 0 | 200 |
+| 4 | hp_maxent_2048x4 | maxent | 2048x4 | 1e-4 | 0 | 200 |
+| 5 | dagger_512x4 | random+bench | 512x4 | 1e-3 | 0 | 100x5 |
+| 6 | dagger_1024x4 | random+bench | 1024x4 | 3e-4 | 0 | 100x5 |
+| 7 | hp_random_1024x4_wd | random | 1024x4 | 3e-4 | 1e-5 | 200 |
 
-| GPU | Data | Hidden | Layers | Params | LR | Epochs | Special |
-|-----|------|--------|--------|--------|----|--------|---------|
-| 0 | maxent | 1024 | 4 | 3.16M | 1e-3 | 100 | - |
-| 1 | maxent | 1024 | 6 | 5.26M | 1e-3 | 100 | - |
-| 2 | maxent | 2048 | 4 | 12.6M | 1e-3 | 100 | - |
-| 3 | maxent | 512 | 4 | 793K | 3e-4 | 200 | Lower LR, longer |
-| 4 | random | 1024 | 4 | 3.16M | 1e-3 | 100 | Baseline comparison |
-| 5 | random | 2048 | 4 | 12.6M | 1e-3 | 100 | Baseline comparison |
-| 6 | random | 1024 | 6 | 5.26M | 1e-3 | 100 | Baseline comparison |
-| 7 | maxent | 512 | 4 | 793K | 1e-3 | 100 | + weight decay 1e-5 |
+## Progress (Epoch ~30)
 
-All experiments include full OOD evaluation (6 settings) after training.
+| Experiment | best_val | Status |
+|-----------|---------|--------|
+| hp_random_1024x6 | **0.005244** | Still improving |
+| hp_random_1024x4_wd | 0.009723 | Training |
+| hp_random_2048x3 | 0.010533 | Training |
+| hp_random_512x4_wd | 0.012935 | Training |
+| dagger_512x4 | 0.006391 | DAgger iter 0 |
+| dagger_1024x4 | 0.008362 | DAgger iter 0 |
+| hp_maxent_1024x6 | 0.126483 | Stuck |
+| hp_maxent_2048x4 | 0.127972 | Stuck |
 
-### Key Question
+## Emerging Observations
 
-Does increasing model capacity from 793K → 12.6M params (16×) close the maxent-random gap?
+1. **1024x6 random is the val_loss champion** - 0.005244, below baseline (0.010)
+2. **DAgger 512x4 already at 0.0064** - excellent for a SMALLER model
+3. **All maxent models stuck at ~0.127** - capacity cannot fix bad data distribution
+4. **Weight decay helps random** - 1024x4+wd at 0.0097 vs baseline 0.010
 
-## Early Results (Epoch 10 of 100)
+## Key Insight: Density > Coverage
 
-### Validation Loss (MSE on held-out data)
-
-| Experiment | train_loss | val_loss | best_val |
-|------------|-----------|----------|----------|
-| maxent 1024×4 | 0.0522 | 0.2200 | 0.1274 |
-| maxent 1024×6 | 0.0461 | 0.2020 | 0.1423 |
-| maxent 2048×4 | 0.0519 | 0.2229 | 0.1257 |
-| maxent 512×4 lr3e-4 | 0.0573 | 0.2574 | 0.1305 |
-| maxent 512×4 +wd | 0.0485 | 0.2219 | 0.1399 |
-| **random 1024×4** | **0.0217** | **0.0196** | **0.0196** |
-| random 2048×4 | 0.0754 | 0.0678 | 0.0558 |
-| random 1024×6 | 0.0634 | 0.0838 | 0.0344 |
-
-### Early Observations
-
-1. **Capacity does NOT close the maxent gap** (so far):
-   - All maxent variants: val_loss ~0.13-0.26, regardless of capacity
-   - The 12.6M model (2048×4) performs similarly to the 793K model (512×4)
-   - Suggests the problem is data distribution, not model capacity
-
-2. **Random benefits from capacity**: 
-   - 1024×4 random achieves val=0.0196 at epoch 10 (already strong)
-   - Larger models (2048×4, 1024×6) are still converging — need more epochs
-
-3. **Lower LR doesn't help maxent**: 
-   - 512×4 with lr=3e-4: best_val=0.1305 (similar to lr=1e-3 best_val=0.1399)
-
-4. **Weight decay slightly helps maxent**: 
-   - 512×4+wd: train=0.0485 (lower than base 512×4 would be at same epoch)
-   - But val still stuck at ~0.22
-
-### Implications
-
-**Important caveat**: Val loss is not the right metric for comparison because the data 
-distributions differ. A model with high val loss on maxent data could still perform well 
-in closed-loop tracking if it learned the right function in the task-relevant region.
-
-The real test is the closed-loop OOD evaluation, which runs after training completes.
-
-## Next: Hybrid Strategies
-
-Based on the OOD analysis (see `ood_analysis.md`), we're preparing 4 hybrid training 
-strategies that combine maxent and random data:
-
-| Strategy | Description | Hypothesis |
-|----------|-------------|------------|
-| concat | 10M pairs combined | Brute force coverage |
-| curriculum | maxent→random | Broad features first, then refine |
-| reverse_curriculum | random→combined | Accuracy first, then add coverage |
-| weighted | 4:1 random:maxent | Emphasize ID while adding OOD |
-
-Script: `scripts/train_hybrid_strategy.py`
-
-## Timeline
-
-- HP sweep: ~2 hours remaining (started ~30 min ago)
-- Hybrid experiments: Launch when GPUs free up (~1.5-2h per experiment)
-- Full analysis: After all experiments complete
+See density_coverage_analysis.md for the full analysis. Summary:
+- Random covers 77.5% of benchmark cells with 25,940 samples/cell
+- Maxent covers 100% but with only 12,764 samples/cell
+- Random performs 9x better despite lower coverage
+- Sample density in task-relevant cells is the key factor
 
 ---
 
-*Status: Training in progress, epoch ~10/100*
-*Updated: During training run*
+*Status: Training ~15% complete, ~3-4 hours remaining*

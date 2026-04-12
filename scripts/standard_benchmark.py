@@ -130,6 +130,17 @@ def main():
         # Hybrid data strategies
         "hybrid_curriculum": ("outputs/hybrid_curriculum_512x4/phase2_random_best.pt", 512, 4),
         "hybrid_weighted": ("outputs/hybrid_weighted_512x4/weighted_best.pt", 512, 4),
+        # HP sweep: random data, larger models
+        "hp_random_1024x6": ("outputs/hp_random_1024x6_lr3e4/best_model.pt", 1024, 6),
+        "hp_random_2048x3": ("outputs/hp_random_2048x3_lr3e4/best_model.pt", 2048, 3),
+        "hp_random_512x4_wd": ("outputs/hp_random_512x4_lr1e4_wd/best_model.pt", 512, 4),
+        "hp_random_1024x4_wd": ("outputs/hp_random_1024x4_lr3e4_wd/best_model.pt", 1024, 4),
+        # HP sweep: maxent data, larger models
+        "hp_maxent_1024x6": ("outputs/hp_maxent_1024x6_lr3e4/best_model.pt", 1024, 6),
+        "hp_maxent_2048x4": ("outputs/hp_maxent_2048x4_lr1e4/best_model.pt", 2048, 4),
+        # DAgger: iterative benchmark-focused training
+        "dagger_512x4": ("outputs/dagger_benchmark_512x4/best_model.pt", 512, 4),
+        "dagger_1024x4": ("outputs/dagger_benchmark_1024x4/best_model.pt", 1024, 4),
     }
 
     # Filter to existing models
