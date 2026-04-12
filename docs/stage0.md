@@ -1,44 +1,33 @@
 # Stage 0: Infrastructure & Baseline
 
-> README Goal: Simulator, reference generator, inverse dynamics oracle,
-> evaluation harness, logging/visualization.
+## Deliverables (all complete)
 
-## Deliverables
+1. **Simulator**: Double pendulum, RK4 integration, realistic inertia/damping
+2. **Oracle**: Finite-difference inverse dynamics, benchmark MSE = 1.85e-4 aggregate
+3. **Standard benchmark**: 6 reference families × 100 trajectories = 600 total
+4. **Coverage metric**: 4D joint histogram over (q1, q2, v1, v2), 10 bins/dim = 10K bins
 
-| Component | Implementation | Status |
-|-----------|---------------|--------|
-| Simulator | Double pendulum, RK4 integration, realistic inertia/damping | ✅ |
-| Reference generator | Multisine (sum-of-sinusoids), 10K trajectories | ✅ |
-| Inverse dynamics oracle | Finite-difference from known EoM | ✅ |
-| Evaluation harness | Closed-loop tracking, 6 reference families | ✅ |
-| Visualization | State-space coverage plots, trajectory playback | ✅ |
+## Oracle Benchmark (Performance Ceiling)
 
-## Oracle Baseline
+| Family | Oracle MSE |
+|--------|-----------|
+| multisine | 1.01e-4 |
+| chirp | 3.16e-4 |
+| sawtooth | 1.93e-4 |
+| pulse | 1.29e-4 |
+| step | 3.25e-4 |
+| random_walk | 4.49e-5 |
+| **Aggregate** | **1.85e-4** |
 
-The inverse dynamics oracle computes exact torques from known equations
-of motion. On the multisine test set:
+All subsequent results are measured as multiples of this ceiling.
 
-| Policy | Tracking MSE | Notes |
-|--------|-------------|-------|
-| Oracle (FD) | 3.43e-9 | Near machine-epsilon |
-| Supervised MLP | 1.96e-2 | 5.7M× worse |
-| Zero torque | 3.27e-1 | Gravity-only baseline |
+## Benchmark Families
 
-The oracle is the performance ceiling for all subsequent stages.
+- **Easy** (multisine, chirp, sawtooth, pulse): smooth oscillatory references
+- **Hard** (step, random_walk): sustained extreme states, tail-heavy visitation
 
-## Standard Benchmark
+Hard families spend 2× more time in high-velocity tails where Coriolis
+forces are large. They test tail accuracy, not exotic states — only
+2.8-5.8% of test states fall outside the random training distribution.
 
-The evaluation harness uses 6 reference families × 100 trajectories = 600 total:
-
-- **Easy**: multisine, chirp, sawtooth, pulse
-- **Hard**: step, random_walk
-
-Oracle aggregate MSE on this benchmark: **1.85e-4**.
-
-## Completion Criteria (from README)
-
-- ✅ Oracle achieves near-zero tracking error on all dataset trajectories
-- ✅ Evaluation harness produces consistent, reproducible metrics
-- ✅ Reference dataset covers broad state space (verified by coverage analysis)
-
-**Stage 0 is COMPLETE.**
+## Stage 0 Status: ✅ COMPLETE
