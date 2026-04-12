@@ -52,6 +52,22 @@ cells. The 2-3% in uncovered cells drives the error.
    benchmark-relevant cells
 4. The ideal strategy: start with random (high density in core), add targeted samples for tails
 
+## NEW: Probe Model Correlation Analysis (18 models)
+
+Trained 18 models with identical architecture (256×3, 2K trajectories) but different
+action types. Measured 4D state-space coverage and standard benchmark MSE.
+
+**Key correlations:**
+- coverage vs bench_mse (excl. bangbang): **r = −0.946**
+- coverage vs log(bench_mse) (excl. bangbang): **r = −0.910**
+- coverage vs bench_mse (all 18): **r = +0.401** (bangbang reverses it!)
+
+**The Bangbang Paradox:** Highest coverage (75.5%) but worst performance (1.06).
+Discontinuous dynamics create states the model cannot learn to track.
+
+**Takeaway:** Within learnable action types, coverage is a near-perfect predictor.
+But coverage must be paired with **learnability** — bangbang breaks this.
+
 ## Predictions for Running Experiments
 
 | Experiment | Prediction | Reasoning |
