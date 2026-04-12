@@ -22,23 +22,38 @@ where N = number of training trajectories.
 | 100K | 3.8e-4 | 0.20× |
 | 350K | 1.3e-4 | 0.07× (≈oracle) |
 
-### Early Validation
+### Validated: 20K Random Training (1024×6)
 
-20K random training (1024×6 architecture):
-- Epoch 10: best_val = **0.001741**
-- Epoch 20: best_val = **0.001169** ← already beating ALL other models!
+| Epoch | best_val | vs Oracle (1.85e-4) |
+|-------|----------|---------------------|
+| 10 | 1.741e-3 | 9.4× |
+| 20 | 1.169e-3 | 6.3× |
+| 30 | 7.90e-4 | 4.3× |
+| 40 | **4.81e-4** | **2.6×** |
 
-Estimated final (with 20-30% further improvement): **~9.4e-4**
-This is **2× better than active learning** (1.86e-3) with pure random data.
+**Training dynamics**: val ~ epoch^{-0.887} (R²=0.94)
 
-### Updated Predictions
+Predictions for 20K model:
+| Epoch | Predicted val | Gap to Oracle |
+|-------|--------------|---------------|
+| 50 | 4.55e-4 | 2.5× |
+| 100 | 2.46e-4 | 1.3× |
+| 150 | 1.72e-4 | 0.93× (!) |
+| 200 | 1.33e-4 | 0.72× (!) |
 
-| N | Predicted Final | Gap to Oracle |
-|---|----------------|---------------|
-| 20K | ~9.4e-4 | 5.1× |
-| 50K | ~4.3e-4 | 2.3× |
-| 100K | ~2.4e-4 | 1.3× |
-| 135K | ~1.9e-4 | ~1.0× (oracle) |
+**Model may surpass FD oracle** in val-loss by epoch ~138.
+(But val-loss ≠ benchmark MSE — awaiting final benchmark eval.)
+
+### 10K vs 20K Direct Comparison (same 1024×6 arch)
+
+| Epoch | 10K val | 20K val | Ratio |
+|-------|---------|---------|-------|
+| 10 | 1.64e-2 | 1.74e-3 | 9.4× |
+| 20 | 6.79e-3 | 1.17e-3 | 5.8× |
+| 30 | 5.24e-3 | 7.90e-4 | 6.6× |
+| 40 | 3.11e-3 | 4.81e-4 | 6.5× |
+
+2× data → 6.5× better val-loss at same epoch. Data quantity dominates.
 
 ## Architecture Scaling
 

@@ -40,15 +40,27 @@ random_walk: 61.6×) where states exceed training range by 3.7×.
 
 Finding: depth matters more than width (1024×6 > 2048×3 despite fewer params).
 
+### Data Quantity Scaling (Stage 1D, 1024×6 arch)
+
+| N traj | Arch | Val-Loss (ep50) | vs Active bench |
+|--------|------|-----------------|-----------------|
+| 10K | 1024×6 | 1.45e-3 (ep120) | TBD |
+| **20K** | 1024×6 | **4.67e-4** (ep50) | **TBD (predicted: ~0.25×)** |
+| 50K | 1024×6 | running | predicted: ~0.10× |
+
+Training dynamics: val ~ epoch^{-0.887}. 2× data → 6.5× better val-loss.
+**Data quantity is the strongest scaling axis found so far.**
+
 ### DAgger (Stage 1D, task-focused augmentation)
 
 | Config | Iter | Val-Loss | Bench MSE |
 |--------|------|----------|-----------|
-| dagger_512x4 | 0 | 0.00120 | TBD |
-| dagger_1024x4 | 0 | 0.00168 | TBD |
+| dagger_512x4 | 0 | 0.00114 | **0.639** |
+| dagger_1024x4 | 0 | training | TBD |
 
-DAgger adds benchmark-like trajectories (step, random_walk, etc.) to training.
-With just 1200 extra trajectories (12% increase), val_loss drops dramatically.
+DAgger iter 0 benchmark MSE = 0.639 (339× worse than active's 1.86e-3).
+Despite similar val-loss! This confirms: **val-loss ≠ benchmark performance**.
+Closed-loop compounding errors dominate. DAgger iterations 1+ should improve.
 
 ## Root Cause Analysis
 
@@ -72,10 +84,30 @@ Probe experiment (18 models, same architecture, same data size):
 
 ## Conclusions
 
-*To be completed when HP sweep and DAgger experiments finish.*
+### Established Findings
 
-Preliminary conclusions:
-1. **Data quality > model capacity** for this problem
-2. DAgger (task-focused data) > active learning ≈ large random model
-3. The practical recommendation: augment training with task-like references
-4. Coverage of task-relevant states is the key predictor
+1. **Data quantity dominates**: 2× more random data → 6.5× lower val-loss (same arch).
+   20K random + 1024×6 (val=4.67e-4) crushes 10K active + 512×4 (val=4.42e-3).
+
+2. **Architecture depth > width**: 1024×6 (5.3M) > 2048×3 (8.4M) by 1.3×.
+   Model capacity scaling: ~3× improvement from 512×4 → 1024×6.
+
+3. **Coverage predicts benchmark**: r = −0.946 for LEARNABLE distributions.
+   Bangbang exception: high coverage but unlearnable dynamics.
+
+4. **Val-loss ≠ benchmark**: DAgger iter 0 has val=1.14e-3 but bench=0.639.
+   Random-trained models have unreliable val-loss calibration to benchmark.
+
+### Scaling Law: MSE ~ N^{-0.85}
+
+Doubling data → 0.56× MSE. Predictions:
+- 20K final: ~3-4e-4 val-loss (2× oracle)
+- 50K: ~4.3e-4 val-loss (running!)
+- 100K: ~2.4e-4 (near oracle)
+
+### Open Questions (awaiting experiments)
+
+1. Does 20K random val-loss advantage translate to benchmark advantage?
+2. Does DAgger iter 1+ dramatically reduce closed-loop error?
+3. Does 50K random approach oracle-level benchmark performance?
+4. Do HP-tuned models change the standard benchmark ranking?

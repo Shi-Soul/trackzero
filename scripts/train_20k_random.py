@@ -104,6 +104,11 @@ def main():
         if val_loss < best_val:
             best_val = val_loss
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            # Save checkpoint periodically on improvement
+            if epoch >= 10:
+                model.load_state_dict(best_state)
+                torch.save({"model_state_dict": model.state_dict()}, out / "best_model.pt")
+                model.train()
 
         scheduler.step()
 
