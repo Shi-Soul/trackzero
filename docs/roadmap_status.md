@@ -1,41 +1,61 @@
 # TRACK-ZERO Roadmap Status
 
-_Last updated after Stage 1C completion + Stage 1D.1 reachability results._
+_Updated: epoch ~80, oracle benchmark computed._
 
 ## Current Status
 
-**Stage 0–1C complete. Stage 1D in progress.**
+**Stage 1D in progress. Oracle lower bound established.**
 
 - **Stage 0 ✅**: Data pipeline, oracle, training loop, evaluation harness.
-- **Stage 1A ✅**: Supervised ID MLP (mean_mse=1.22e-4).
-- **Stage 1B ✅**: Random-rollout self-supervised; coverage/scaling/OOD analysis.
-- **Stage 1C ✅**: 13 experiments exploring coverage strategies. **Goldilocks Principle** discovered — random rollouts are near-optimal. See `docs/stage_1c.md`.
-- **Stage 1D 🧪**: Reachability (1D.1) complete — catastrophic failure. DAgger and trajectory optimization next.
-- **Stage 1E**: Ablation scripts exist; not complete at full scale.
-- **Stage 2–4**: Not yet implemented.
+- **Stage 1A ✅**: Supervised ID MLP baseline.
+- **Stage 1B ✅**: Random-rollout self-supervised; coverage/scaling analysis.
+- **Stage 1C ✅**: 13 data collection strategies + 18 coverage probes + 10 ablations.
+- **Stage 1D 🧪**: HP sweeps + DAgger running on all 8 GPUs.
 
-## Progress Estimate
+## Theoretical Bounds
 
-| Scope | Estimate | Notes |
-|-------|---------|-------|
-| **Overall (Stage 0-4)** | **~45%** | Stage 1 nearly complete |
-| **Stage 0** | **100%** | Full pipeline + baseline |
-| **Stage 1A** | **100%** | Supervised baseline |
-| **Stage 1B** | **100%** | Coverage, ablations, OOD |
-| **Stage 1C** | **100%** | 13 experiments, Goldilocks principle |
-| **Stage 1D** | **40%** | 1D.1 done (negative), 1D.2/1D.3/DAgger pending |
-| **Stage 1E** | **50%** | Ablation scripts exist |
-| **Stage 2–4** | **0%** | Not started |
+| Level | MSE | Description |
+|-------|-----|-------------|
+| **Shooting oracle** | 4.6e-8 | Perfect inverse dynamics (impractical) |
+| **FD oracle** | **1.85e-4** | Finite-difference oracle (model target) |
+| **Best MLP (active)** | 1.86e-3 | 10.0× above oracle |
+| **Random baseline** | 2.67e-3 | 14.4× above oracle |
 
-## Stage 1C Key Finding: The Goldilocks Principle
+**The 10× MLP-to-oracle gap is concentrated on 2 of 6 families:**
+- Step: 23.5× gap (q2 excursion 3.7× beyond training range)
+- Random_walk: 61.6× gap (similar extrapolation issue)
+- Easy families (multisine, chirp, sawtooth, pulse): gap ≤ 2× (solved)
 
-| Category | Method | Ratio vs Random |
-|---|---|---:|
-| Ergodic (BEST) | random_matched | 1.0× |
-| Mild perturbation | hybrid/density/active/rebalance/adversarial | 1.2–2.4× |
-| Too broad (RL) | maxent_rl | 82.6× |
-| Too narrow | restricted_v | 172× |
-| No coherence | reachability | 1,017–4,314× |
+## Running Experiments (epoch ~80)
 
-Random rollouts produce naturally optimal training distribution.
-Both narrowing and broadening catastrophically degrade performance.
+| GPU | Experiment | best_val | Notes |
+|-----|-----------|----------|-------|
+| 0 | hp_random_1024x6 | **0.001675** | Below active benchmark! |
+| 1 | hp_random_2048x3 | 0.002744 | Good |
+| 2 | hp_random_512x4_wd | 0.006252 | Slow |
+| 3 | hp_maxent_1024x6 | 0.028030 | Hopeless |
+| 4 | hp_maxent_2048x4 | >0.095 | Very slow |
+| 5 | dagger_512x4 | **0.001540** | Best val_loss |
+| 6 | dagger_1024x4 | 0.001681 | Excellent |
+| 7 | hp_random_1024x4_wd | 0.002301 | Strong |
+
+## Key Findings So Far
+
+1. **Coverage ↔ performance**: r = −0.946 within learnable action types
+2. **Oracle gap**: 10× between best MLP and FD oracle, 95% on step + random_walk
+3. **Error concentration**: Top 10 of 100 step trajectories = 85.7% of step error
+4. **Root cause**: q2 exceeds training 99th percentile by 3.7× in hard families
+5. **Depth > width**: 1024×6 (5.3M) beats 2048×3 (8.4M) on same data
+6. **Capacity closes gap**: hp_random_1024x6 val_loss < active benchmark MSE
+7. **Maxent fails**: Even 12.6M param model → 15× worse (data quality issue)
+8. **Bangbang paradox**: Highest coverage (75.5%) but worst performance (unlearnable)
+
+## Remaining Steps
+
+1. **Benchmark all HP/DAgger models** when training completes (~3-4h)
+2. **Analyze DAgger iteration curve** (does task-focused data augmentation help?)
+3. **Final unified ranking** (47+ models)
+4. **Coverage vs benchmark plot** across ALL models
+5. **Stage 1E**: Synthesis document — what strategy wins and why
+6. **Stage 2**: Infeasible reference tracking (future)
+7. **Stage 3-4**: Real-world transfer (future)
