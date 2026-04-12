@@ -36,16 +36,24 @@ All Stage 1C variants share a matched budget:
 
 ## ID Results (Multisine Test Set)
 
-| Method | mean MSE_total | max MSE_total | median MSE_total |
-|---|---:|---:|---:|
-| **random_matched** | **1.185e-4** | 2.156e-3 | 6.182e-5 |
-| hybrid_coverage | 1.478e-4 | 2.759e-3 | 6.389e-5 |
-| low_density | 1.532e-4 | 2.928e-3 | 7.221e-5 |
-| disagreement | 1.662e-4 | 3.807e-3 | 8.321e-5 |
-| rebalance_bins | 1.950e-4 | 7.620e-3 | 7.543e-5 |
-| hindsight | 2.894e-4 | 1.816e-2 | 7.970e-5 |
+| Method | mean MSE_total | max MSE_total | median MSE_total | Category |
+|---|---:|---:|---:|---|
+| **random_matched** | **1.185e-4** | 2.156e-3 | 6.182e-5 | Ergodic |
+| hybrid_coverage | 1.478e-4 | 2.759e-3 | 6.389e-5 | Mild |
+| low_density | 1.532e-4 | 2.928e-3 | 7.221e-5 | Mild |
+| disagreement | 1.662e-4 | 3.807e-3 | 8.321e-5 | Mild |
+| rebalance_bins | 1.950e-4 | 7.620e-3 | 7.543e-5 | Mild |
+| hindsight | 2.894e-4 | 1.816e-2 | 7.970e-5 | Mild |
+| **maxent_rl** | **9.788e-3** | 2.573e-1 | 4.579e-3 | Too broad |
+| **adversarial_v2** | **2.239e-4** | 7.244e-3 | — | Targeted |
+| restricted_v | 2.047e-2 | 1.700 | 8.330e-4 | Too narrow |
+| reachability_v5 | 1.205e-1 | 2.326 | 3.355e-2 | No coherence |
+| reachability_v15 | 5.114e-1 | — | — | No coherence |
 
-Random baseline wins ID cleanly. Hindsight is worst (2.4x worse).
+**Three regimes emerge:**
+- Mild perturbations from ergodic (1.03–2.44×): tolerable
+- Distribution shift (maxent RL 82.6×, restricted-v 172×): catastrophic
+- No trajectory coherence (reachability 1,017–4,314×): complete failure
 
 ---
 
@@ -76,28 +84,34 @@ Random baseline wins ID cleanly. Hindsight is worst (2.4x worse).
 
 ## Key Research Findings
 
-### 1. The random baseline is unreasonably strong
+### 1. The Goldilocks Principle (Main Result)
 
-With mixed action types and 10k trajectories, random rollouts achieve broad 4D
-state coverage that no selection method improves upon holistically.
+Random rollouts produce a naturally optimal training distribution. Any deviation
+hurts — whether narrowing (restricted-v: 172×) or broadening (maxent RL: 82.6×).
 
-### 2. Selection creates a coverage-specificity tradeoff
+The ergodic measure of random dynamics provides:
+- **Sufficient breadth**: 92% state coverage for closed-loop robustness
+- **Natural concentration**: capacity focused on dynamically natural states
+- **Trajectory coherence**: temporal structure preserved (critical!)
 
-Each selector concentrates data in its target region at the expense of broad coverage:
-- **Low-density** helps `sawtooth` but hurts `mixed_ood` 3.3x
-- **Rebalance** helps `random_walk` slightly but hurts `mixed_ood` 6.2x
-- **Hybrid** helps `sawtooth`+`pulse` but hurts `mixed_ood` 3.5x
-- **Disagreement** hurts almost everything; curiosity trap
+### 2. Max-Entropy RL: More Uniform ≠ Better
 
-### 3. Hindsight is limited by teacher quality
+Despite achieving 94.6% coverage (vs 92.0%) and H=10.99 nats (vs 8.46),
+the max-entropy policy produces data that's **82.6× worse** for tracking.
+The model cannot fit the ID function uniformly (train loss 0.43 vs 0.007).
 
-Teacher has MSE=0.010 on mixed_ood refs. Achieved trajectories concentrate near
-the teacher's comfort zone, not in the hard regions we need.
+### 3. Trajectory Coherence Is Essential
 
-### 4. The binding constraint is likely capacity, not coverage
+Reachability-guided single-step data fails catastrophically even with
+matched velocity range (1,017×). The training loss converges (0.011) but
+val loss monotonically increases (5.98 → 14.06). Single-step patterns
+don't transfer to sequential tracking.
 
-Val losses are similar (~0.002) across methods. The data *distribution* matters
-more than visiting specific rare bins.
+### 4. Closed-Loop Error Compounding
+
+Restricted-velocity shows the DAgger (Ross et al. 2011) phenomenon:
+the model's errors change which states are visited, requiring robustness
+to states OUTSIDE the test distribution. P99 error ratio grows to 154×.
 
 ---
 
@@ -105,11 +119,15 @@ more than visiting specific rare bins.
 
 | Approach | Status | Outcome |
 |---|---|---|
-| State-space binning with rebalancing | Done | Negative |
-| Maximum entropy / low-density | Done | Negative |
-| Curiosity / ensemble disagreement | Done | Negative |
-| Hindsight relabeling | Done | Negative |
-| Adversarial reference generation | Not yet | Next candidate |
+| State-space binning with rebalancing | Done | Negative (1.64×) |
+| Maximum entropy / low-density scoring | Done | Negative (1.29×) |
+| **Max-entropy RL exploration** | **Done** | **Negative (82.6×)** |
+| Curiosity / ensemble disagreement | Done | Negative (1.40×) |
+| Hindsight relabeling | Done | Negative (2.44×) |
+| Adversarial reference generation | Done | Negative (1.89×) |
+| Restricted-velocity baseline | Done | Catastrophic (172×) |
+| Reachability-guided (v=±15) | Done | Catastrophic (4,314×) |
+| Reachability-guided (v=±5) | Done | Catastrophic (1,017×) |
 
 ---
 
@@ -117,22 +135,33 @@ more than visiting specific rare bins.
 
 | Directory | Description |
 |---|---|
-| `outputs/stage1c_random_matched/` | Matched random baseline |
+| `outputs/stage1c_random_matched/` | Matched random baseline (BEST) |
 | `outputs/stage1c_active_full/` | Disagreement active collection |
 | `outputs/stage1c_rebalance_full/` | Bin rebalancing |
 | `outputs/stage1c_density_full/` | Low-density selector |
 | `outputs/stage1c_hybrid_full/` | Hybrid coverage |
 | `outputs/stage1c_hindsight_full/` | Hindsight relabeling |
+| `outputs/stage1c_maxent_rl/` | Max-entropy RL exploration |
+| `outputs/stage1c_adversarial_full/` | Adversarial reference generation |
+| `outputs/stage1c_restricted_v/` | Restricted-velocity baseline |
+| `outputs/stage1d_reachability_5M/` | Reachability v=±15 |
+| `outputs/stage1d_reachability_5M_v5/` | Reachability v=±5 |
 | `outputs/stage1c_ood_*` | OOD comparison runs |
 
 ---
 
-## Next Steps: Stage 1D
+## Next Steps: Stage 1D (Revised)
 
-Key insight from 1C: **reweighting existing rollout data doesn't help**.
-Stage 1D should focus on **generating qualitatively new data**:
-- Reachability-guided sampling
-- Trajectory optimization as data generator
-- Planning-based distillation (iLQR/CEM/MPPI)
+Given the Goldilocks principle, Stage 1D should NOT pursue:
+- ❌ Uniform coverage (maxent RL already proven suboptimal)
+- ❌ Single-step reachability data (no trajectory coherence)
+
+Instead, Stage 1D should explore:
+- **DAgger-style iterative refinement**: Train on random → track → collect
+  error states → augment → retrain. Directly addresses distributional shift.
+- **Trajectory optimization**: iLQR/CEM generates coherent trajectories
+  that explore specific state-space regions as needed.
+- **Curriculum learning**: Start with easy references, progressively
+  increase difficulty to build robustness incrementally.
 
 Best model to carry forward: `outputs/stage1c_random_matched/best_model.pt`

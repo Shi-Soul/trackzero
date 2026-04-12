@@ -81,20 +81,31 @@ state space. Transition diversity is fairly uniform — hard to improve.
 
 ## Empirical Test: Coverage vs Entropy
 
-GPU measurements (20-bin 4D histogram, same step budget ~200M):
+GPU measurements (20-bin 4D histogram, same step budget ~209M):
 
 | Metric | Random | Max-Entropy RL |
 |---|---:|---:|
-| Coverage (% bins occupied) | ~91.9% | ~91.3% |
-| Histogram entropy (nats) | 8.46 | **10.90** |
-| Entropy gap | — | **+2.44 nats** |
+| Coverage (% bins occupied) | 92.0% | **94.6%** |
+| Histogram entropy (nats) | 8.46 | **10.99** |
+| Entropy gap vs max (11.98) | −3.52 | **−0.99** |
 
-**Striking**: Random and max-entropy achieve nearly IDENTICAL coverage!
-Both fill ~91% of bins. But max-entropy distributes visits **~10× more
-uniformly** (2.44 nats difference ≈ e^2.44 ≈ 11.5× more uniform).
+Max-entropy achieves near-uniform visits (H=10.99 ≈ 92% of max 11.98).
+But 2.6% more coverage and 30% higher entropy → **82.6× worse ID model!**
 
-This means the question reduces to: **does visit UNIFORMITY matter
-when coverage is already saturated?**
+### Max-Entropy RL Detailed Result
+
+| Metric | Maxent RL | Random | Ratio |
+|---|---:|---:|---:|
+| Mean MSE | **9.79e-3** | 1.19e-4 | **82.6×** |
+| Median MSE | 4.58e-3 | 6.18e-5 | 74.1× |
+| Max MSE | 2.57e-1 | 2.16e-3 | 119× |
+| Train loss | 0.432 | 0.007 | 61.7× |
+| Best val loss | 2.141 | 0.007 | 306× |
+
+**This definitively answers**: visit uniformity HURTS when it exceeds
+the ergodic measure. The model's 793k parameters cannot fit the ID
+function uniformly well — forcing uniform visits wastes capacity on
+extreme states (high Coriolis terms) while starving common states.
 
 ---
 
@@ -221,4 +232,44 @@ This resolves the 1C paradox:
 **Random rollouts hit a Goldilocks zone**: broad enough for robustness,
 concentrated enough in natural dynamics to be sample-efficient.
 
-See `stage_1c_maxent_results.md` for max-entropy RL results (pending).
+---
+
+## The Complete Distribution Spectrum
+
+All 12 methods ordered by deviation from ergodic measure:
+
+| Method | mean_mse | Ratio | Category |
+|---|---:|---:|---|
+| random_matched | **1.185e-4** | 1.00× | Ergodic (baseline) |
+| stage1a_scaled | 1.216e-4 | 1.03× | Supervised |
+| hybrid | 1.478e-4 | 1.25× | Mild concentration |
+| density | 1.532e-4 | 1.29× | Mild broadening |
+| active | 1.662e-4 | 1.40× | Targeted |
+| adversarial_v1 | 1.886e-4 | 1.59× | Targeted |
+| rebalance | 1.950e-4 | 1.64× | Forced uniform |
+| hindsight | 2.894e-4 | 2.44× | Relabeling |
+| adversarial_v2 | 2.239e-4 | 1.89× | Targeted (full) |
+| **maxent_rl** | **9.788e-3** | **82.6×** | True max-entropy RL |
+| restricted_v | 2.047e-2 | 172× | Too narrow |
+| reachability_v5 | 1.205e-1 | 1,017× | No coherence (matched v) |
+| reachability_v15 | 5.114e-1 | 4,314× | No coherence (full v) |
+
+### The Goldilocks Principle
+
+Three distinct failure regimes:
+
+1. **Too narrow** (restricted-v, 172×): Model learns in-distribution
+   perfectly but catastrophic closed-loop error compounding in unseen states.
+
+2. **Just right** (random, 1×): Ergodic measure naturally balances
+   breadth (robustness) and concentration (efficiency). The ~92% coverage
+   is sufficient; the natural density weighting is optimal.
+
+3. **Too broad** (maxent RL, 82.6×): Near-uniform visits force model to
+   allocate capacity to extreme states with high Coriolis sensitivity.
+   Train loss 0.43 (vs 0.007) — the model simply cannot fit uniformly.
+
+4. **No coherence** (reachability, 1,017–4,314×): Single-step i.i.d. data
+   lacks trajectory structure. Even with matched velocity (v=±5), val loss
+   monotonically increases (5.98→14.06). The model memorizes single-step
+   patterns that don't generalize to sequential tracking.
