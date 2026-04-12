@@ -100,7 +100,7 @@ def generate_benchmark_reference_trajectories(cfg, n_per_family, seed):
 
 
 def train_model(X, Y, X_val, Y_val, hidden_dim, n_hidden, device,
-                epochs=100, lr=1e-3, batch_size=65536):
+                epochs=100, lr=1e-3, batch_size=65536, out_dir=None, iter_idx=0):
     """Train an inverse dynamics model."""
     model = InverseDynamicsMLP(
         state_dim=4, action_dim=2,
@@ -148,9 +148,14 @@ def train_model(X, Y, X_val, Y_val, hidden_dim, n_hidden, device,
         if val_loss < best_val:
             best_val = val_loss
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            # Save intermediate checkpoint to prevent data loss
+            if out_dir is not None:
+                torch.save({"model_state_dict": best_state},
+                           out_dir / f"best_model_iter{iter_idx}.pt")
 
         if epoch % 20 == 0 or epoch == 1:
-            print(f"    Epoch {epoch:3d}: train={train_loss:.6f} val={val_loss:.6f} best={best_val:.6f}")
+            print(f"    Epoch {epoch:3d}: train={train_loss:.6f} val={val_loss:.6f} best={best_val:.6f}",
+                  flush=True)
 
     model.load_state_dict(best_state)
     return model, best_val
@@ -250,11 +255,13 @@ def main():
         epochs = args.epochs_init if iteration == 0 else args.epochs_refine
         lr = args.lr if iteration == 0 else args.lr * 0.5
 
-        print(f"  Training {args.hidden_dim}x{args.n_hidden} for {epochs} epochs, lr={lr}")
+        print(f"  Training {args.hidden_dim}x{args.n_hidden} for {epochs} epochs, lr={lr}",
+              flush=True)
         model, best_val = train_model(
             X, Y, X_val, Y_val,
             args.hidden_dim, args.n_hidden, device,
             epochs=epochs, lr=lr,
+            out_dir=out, iter_idx=iteration,
         )
 
         # Evaluate on standard benchmark

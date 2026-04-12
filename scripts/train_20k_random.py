@@ -67,8 +67,8 @@ def main():
     # Training
     train_ds = TensorDataset(torch.from_numpy(X), torch.from_numpy(Y))
     val_ds_t = TensorDataset(torch.from_numpy(X_val), torch.from_numpy(Y_val))
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_ds_t, batch_size=args.batch_size*2, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+    val_loader = DataLoader(val_ds_t, batch_size=args.batch_size*2, num_workers=0, pin_memory=True)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)

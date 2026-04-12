@@ -141,6 +141,8 @@ def main():
         # DAgger: iterative benchmark-focused training
         "dagger_512x4": ("outputs/dagger_benchmark_512x4/best_model.pt", 512, 4),
         "dagger_1024x4": ("outputs/dagger_benchmark_1024x4/best_model.pt", 1024, 4),
+        # Data scaling experiments
+        "random_20k_1024x6": ("outputs/random_20k_1024x6/best_model.pt", 1024, 6),
     }
 
     # Filter to existing models
