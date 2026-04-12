@@ -24,8 +24,11 @@ import torch.nn as nn
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from trackzero.models import InverseDynamicsMLP
-from trackzero.config import get_config
+from trackzero.config import load_config
+from trackzero.policy.mlp import InverseDynamicsMLP, MLPPolicy
+from trackzero.data.ood_references import OOD_ACTION_GENERATORS, generate_ood_reference_data
+from trackzero.data.dataset import TrajectoryDataset
+from trackzero.eval.harness import EvalHarness
 
 
 def load_random_data(path="data/medium/train.h5"):
@@ -96,31 +99,28 @@ def eval_model(model, val_x, val_y, batch_size=65536):
 
 def eval_ood(model, cfg, device):
     """Run OOD benchmark on 6 settings."""
-    from trackzero.reference import generate_reference_data, generate_ood_reference_data
-    from trackzero.simulation import DoublePendulumSim
-    from trackzero.tracking import run_tracking
+    harness = EvalHarness(cfg)
+    tau_max = cfg.pendulum.tau_max
+    policy = MLPPolicy(model, tau_max=tau_max)
+
+    # ID evaluation
+    val_ds = TrajectoryDataset("data/medium/test.h5")
+    val_s, val_a = val_ds.get_all_states(), val_ds.get_all_actions()
+    val_ds.close()
 
     results = {}
-    settings = [
-        ("id_multisine", None),
-        ("ood_chirp", "chirp"),
-        ("ood_step", "step"),
-        ("ood_random_walk", "random_walk"),
-        ("ood_sawtooth", "sawtooth"),
-        ("ood_pulse", "pulse"),
-    ]
+    print("  ID evaluation...")
+    id_summary = harness.evaluate_policy(policy, val_s, val_a, max_trajectories=200)
+    results["id_multisine"] = float(id_summary.mean_mse_total)
+    print(f"    id_multisine: {results['id_multisine']:.4e}")
 
-    model.eval()
-    for name, ood_type in settings:
-        if ood_type is None:
-            ref = generate_reference_data(cfg, n_trajectories=50, seed=42)
-        else:
-            ref = generate_ood_reference_data(cfg, n_trajectories=50,
-                                               action_type=ood_type, seed=42)
-        sim = DoublePendulumSim(cfg)
-        metrics = run_tracking(sim, model, ref, device=device)
-        results[name] = float(metrics["mean_mse_total"])
-        print(f"    {name}: {results[name]:.4e}")
+    # OOD evaluation
+    for ood_type in OOD_ACTION_GENERATORS:
+        s, a = generate_ood_reference_data(cfg, ood_type, n_trajectories=200)
+        summary = harness.evaluate_policy(policy, s, a, max_trajectories=200)
+        mse = float(summary.mean_mse_total)
+        results[f"ood_{ood_type}"] = mse
+        print(f"    ood_{ood_type}: {mse:.4e}")
 
     return results
 
@@ -139,7 +139,7 @@ def run_strategy(args):
     maxent_st, maxent_stp1, maxent_a = load_maxent_data()
     print(f"  Random: {len(rand_st)} pairs, Maxent: {len(maxent_st)} pairs")
 
-    cfg = get_config()
+    cfg = load_config()
 
     if args.strategy == "concat":
         # Simply concatenate all data
