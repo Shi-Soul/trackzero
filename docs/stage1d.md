@@ -63,19 +63,33 @@ coverage problem: training data has <0.01% coverage above
 At 10K, larger capacity causes 229x degradation. Classic
 overfitting: 5M data points insufficient for 5.3M params.
 
-## Full Experiment Matrix (in progress)
+## Bugfix: tau_max Normalization (commit 1188bfa)
+
+All previous scaling experiments had a critical bug: training
+targets were divided by tau_max=5.0 (`Y = u_t / tau_max`), but
+`MLPPolicy.__call__()` expects raw torques and clips to
+[-tau_max, tau_max]. Result: models applied 1/5 the correct
+torque, yielding ~5000x oracle on all configurations.
+
+Fix: `Y = u_t.astype(np.float32)` (raw torques, no normalization).
+All scaling experiments relaunched from scratch.
+
+## Full Experiment Matrix (relaunched post-bugfix)
 
 |  | 512x4 (1.1M) | 1024x6 (5.3M) |
 |--|--------------|----------------|
-| 10K random | 14x oracle (done) | 3300x oracle (done) |
-| 20K random | GPU2, ep20, val 3.18e-3 | GPU0, ep70, val 3.09e-4 |
-| 50K random | GPU3, data gen | GPU1, ep20, val 4.54e-4 |
-| 100K random | GPU6, data gen | GPU7, ep10, val 8.10e-4 |
-| 10K bangbang | GPU4, ep40, val 4.50e-3 | GPU5, ep1, val 2.01e-2 |
+| 10K random | 14× oracle (pre-bugfix, ok) | 3300× (pre-bugfix, ok) |
+| 20K random | GPU 2 | GPU 1 |
+| 50K random | GPU 4 | GPU 3 |
+| 100K random | GPU 6 | GPU 5 |
+| 10K bangbang | GPU 7 | — |
+
+Note: 10K results are from Stage 1C (different training script,
+no bug). All new experiments use the fixed `train_20k_random.py`.
 
 When training completes, this matrix answers:
 1. How does benchmark MSE scale with data quantity?
-2. Does 1024x6 recover at higher data budgets?
+2. Does 1024×6 recover at higher data budgets?
 3. Does bangbang outperform random at equal budget?
 
 ## DAgger Analysis
