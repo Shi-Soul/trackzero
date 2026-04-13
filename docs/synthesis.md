@@ -23,13 +23,35 @@ All DAgger variants, all 1024×6 models (overtrained or undertrained).
 
 ## Key Findings
 
-### 1. The oracle gap is family-specific
+### 1. The mean oracle gap is a tail phenomenon
 
-On smooth families (multisine, chirp, sawtooth, pulse), TRACK-ZERO
-active achieves 0.6–1.7× oracle — effectively solved. The aggregate
-10× gap is entirely due to step (23×) and random_walk (62×), which
-involve discontinuous torque commands producing high-velocity states
-underrepresented in training data.
+The 10× aggregate gap is misleading. Decomposing by percentile:
+
+| Metric | Active | Oracle | Ratio |
+|--------|--------|--------|-------|
+| Median aggregate | 1.37e-4 | ~1e-4 (est.) | ~1.4× |
+| Mean aggregate | 1.86e-3 | 1.85e-4 | 10× |
+| Mean/Median ratio | 13.5× | ~2× | — |
+
+The TRACK-ZERO policy is **near-oracle on the majority of
+trajectories** (median 1.37e-4). The 10× mean gap comes entirely
+from a small fraction of outlier trajectories where errors are
+100–1000× the median. These outliers concentrate in step (max/med
+= 1061×) and random_walk (max/med = 442×), where discontinuous
+torques drive the system into high-velocity states rarely seen
+in training. On smooth families, max/med is only 19–45×.
+
+**Root cause: high-velocity data sparsity.** Per-trajectory analysis
+reveals that the worst outliers reach joint velocities of 18–23 rad/s.
+In the 10K random rollout training set:
+- Only 0.01% of samples have |ω₁| > 10 rad/s
+- Only 0.04% have |ω₂| > 15 rad/s
+- Effectively 0% have |ω₂| > 20 rad/s
+
+The inverse dynamics has Coriolis terms ∝ ω², so extrapolation
+error grows quadratically at unseen velocities. The gap is not
+about learning capacity or exploration intelligence — it is about
+the exponential rarity of high-velocity states under random torques.
 
 ### 2. Exploration strategy < data quantity
 
