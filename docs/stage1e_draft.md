@@ -60,20 +60,16 @@ The oracle gap is a velocity coverage problem:
 - Above 15 rad/s: 58× oracle
 - Training data has <0.01% coverage above 10 rad/s (joint 1)
 
-### Pending: Data Scaling (benchmark when training completes)
+### Pending: Data Scaling (post-bugfix, training in progress)
 
-| Config | Status | Val-loss | Prediction |
-|--------|--------|----------|------------|
-| 20K 1024×6 | ep140, val=1.70e-4 | Oracle-level | 2-30× oracle agg |
-| 20K 512×4 | ep20, val=3.18e-3 | Converging | 5-10× oracle agg |
-| 50K 1024×6 | ep40, val=1.79e-4 | Oracle-level | TBD |
-| 100K 1024×6 | ep10, val=7.32e-4 | Early | TBD |
+All scaling experiments were relaunched after the tau_max
+normalization bugfix (commit 1188bfa). Previous val-loss
+numbers were invalid. Results TBD.
 
 ### Pending: Targeted Coverage (bangbang augmentation)
 
-| Config | Status | Val-loss | Prediction |
-|--------|--------|----------|------------|
-| bangbang aug 512×4 | ep30, val=4.80e-3 | Converging | ~2e-4 agg if hypothesis correct |
+Bangbang augmented 512×4 training in progress (post-bugfix).
+Result TBD.
 
 ## Analysis Framework (to fill when results arrive)
 

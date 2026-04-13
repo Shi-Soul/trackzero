@@ -150,7 +150,6 @@ def main():
         # Data scaling experiments
         "random_20k_1024x6": ("outputs/random_20k_1024x6/best_model.pt", 1024, 6),
         "random_50k_1024x6": ("outputs/random_50k_1024x6/best_model.pt", 1024, 6),
-        "random_50k_1024x6_v2": ("outputs/random_50k_1024x6_v2/best_model.pt", 1024, 6),
         "random_100k_1024x6": ("outputs/random_100k_1024x6/best_model.pt", 1024, 6),
         "random_20k_512x4": ("outputs/random_20k_512x4/best_model.pt", 512, 4),
         "random_50k_512x4": ("outputs/random_50k_512x4/best_model.pt", 512, 4),
