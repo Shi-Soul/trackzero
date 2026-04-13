@@ -1,22 +1,28 @@
 # Experiment Status
 
-## Active Experiments
+## Active Training (as of benchmark v4 completion)
 
-| GPU | Experiment | Config | Status |
-|-----|-----------|--------|--------|
-| 0 | random_20k_1024x6 | 20K traj, 1024×6, lr=3e-4 | Data gen → training |
-| 3 | random_50k_1024x6_v2 | 50K traj, 1024×6, lr=3e-4 | Data gen → training |
-| 5 | random_100k_1024x6 | 100K traj, 1024×6, lr=3e-4 | Data gen → training |
-| 7 | standard_benchmark_v3 | All models with checkpoints | Evaluating |
+| GPU | Experiment | Arch | Data | Epoch | Best Val | Est. Remaining |
+|-----|-----------|------|------|-------|----------|----------------|
+| 0 | random_20k v5 | 1024×6 | 20K | 40/200 | 4.94e-4 | ~16 hrs |
+| 1 | random_50k v6 | 1024×6 | 50K | 10/200 | 1.23e-3 | ~30 hrs |
+| 7 | random_100k v4 | 1024×6 | 100K | 1/200 | 8.38e-3 | ~80 hrs |
 
-## Completed Results
+DAgger runs (GPU 5, 7) may still be iterating but produce
+consistently bad results (0.6+ aggregate); not worth monitoring.
 
-See `outputs/standard_benchmark_v2.json` for the 13-model benchmark.
-Top result: active at 10.0× oracle (1.86e-3 aggregate MSE).
+## Completed Benchmark v4
 
-## Next Steps
+23 models evaluated. See `outputs/standard_benchmark_v4.json`.
+Full ranking in [stage1d.md](stage1d.md).
 
-1. When 20K/50K/100K training completes → benchmark all three
-2. Plot data-scaling curve: benchmark MSE vs N_trajectories
-3. If scaling closes the gap → write Stage 1E conclusion
-4. If not → investigate architecture ablations at 100K data
+## GPU Utilization
+
+GPUs 2, 3, 4 have zombie processes (~1–6 GB) but low utilization.
+Reclaimable for new experiments.
+
+## Immediate Next Steps
+
+1. Wait for 20K training → benchmark → first scaling data point
+2. Launch 512×4 with 20K data (critical: test architecture × data)
+3. Kill zombie processes, reclaim GPUs 2–4

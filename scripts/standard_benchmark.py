@@ -141,11 +141,16 @@ def main():
         # DAgger: iterative benchmark-focused training
         "dagger_512x4": ("outputs/dagger_benchmark_512x4/best_model.pt", 512, 4),
         "dagger_1024x4": ("outputs/dagger_benchmark_1024x4/best_model.pt", 1024, 4),
+        # DAgger iteration checkpoints
+        "dagger_1024x4_iter0": ("outputs/dagger_benchmark_1024x4/iter0_best.pt", 1024, 4),
+        "dagger_1024x4_iter1": ("outputs/dagger_benchmark_1024x4/iter1_best.pt", 1024, 4),
+        "dagger_512x4_iter0": ("outputs/dagger_benchmark_512x4/iter0_best.pt", 512, 4),
+        "dagger_512x4_iter1": ("outputs/dagger_benchmark_512x4/iter1_best.pt", 512, 4),
+        "dagger_512x4_iter2": ("outputs/dagger_benchmark_512x4/iter2_best.pt", 512, 4),
         # Data scaling experiments
         "random_20k_1024x6": ("outputs/random_20k_1024x6/best_model.pt", 1024, 6),
         "random_50k_1024x6": ("outputs/random_50k_1024x6/best_model.pt", 1024, 6),
-        # DAgger v2 (rerun with intermediate checkpoints)
-        "dagger_512x4_v2": ("outputs/dagger_benchmark_512x4_v2/best_model.pt", 512, 4),
+        "random_50k_1024x6_v2": ("outputs/random_50k_1024x6_v2/best_model.pt", 1024, 6),
     }
 
     # Filter to existing models

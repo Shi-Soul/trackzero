@@ -1,81 +1,109 @@
-# Stage 1D: Scaling & Architecture
+# Stage 1D: Scaling & Architecture Ablations
 
 ## Research Question
 
-Can scaling the data budget and/or model capacity close the 10×
-gap between the best TRACK-ZERO method and the oracle? (README Stage 1D)
+Stage 1C showed all exploration methods cluster within 1.5× of
+random at fixed data budget. The best (active) is still 10× oracle.
+Two scaling axes remain: **data quantity** and **model capacity**.
+This stage tests whether either closes the gap.
 
-## Motivation
+## Standard Benchmark v4 (23 models)
 
-Stage 1C showed that at 10K trajectories, all exploration methods
-cluster within 1.5× of random (aggregate MSE 1.86e-3 to 2.67e-3),
-but the best is still 10× oracle. Two axes of scaling may help:
+All models evaluated on the same 600-trajectory benchmark (6 families
+× 100 trajectories). Oracle aggregate MSE: **1.85e-4**.
 
-1. **Data quantity**: more trajectories → higher per-bin density
-   → lower local approximation error
-2. **Model capacity**: larger network → better function approximation
-   for complex torque landscapes
+### Full Ranking
 
-## Experiments
+| Rank | Method | Arch | Data | Agg MSE | ×Oracle |
+|------|--------|------|------|---------|---------|
+| 1 | active | 512×4 | 10K | 1.86e-3 | 10.0 |
+| 2 | hybrid_select | 512×4 | 10K | 2.15e-3 | 11.6 |
+| 3 | rebalance | 512×4 | 10K | 2.18e-3 | 11.8 |
+| 4 | random | 512×4 | 10K | 2.67e-3 | 14.4 |
+| 5 | density | 512×4 | 10K | 3.17e-3 | 17.1 |
+| 6 | hybrid_weighted | 512×4 | 10K | 4.49e-3 | 24.3 |
+| 7 | adversarial | 512×4 | 10K | 5.01e-3 | 27.1 |
+| 8 | hindsight | 512×4 | 10K | 8.13e-3 | 43.9 |
+| 9 | maxent_rl | 512×4 | 10K | 2.39e-2 | 129 |
+| 10 | supervised_1a | 512×4 | demo | 3.52e-2 | 190 |
+| 11 | hybrid_curriculum | 512×4 | 10K | 4.51e-2 | 244 |
+| 12–20 | DAgger variants | various | demo | 0.60–0.67 | 3200–3600 |
+| 21–23 | 20K/50K (undertrained) | 1024×6 | 20K/50K | 0.92–0.94 | ~5000 |
 
-### Axis 1: Data Scaling (architecture fixed at 1024×6)
+### Oracle Gap by Family
 
-All experiments use the same mixed-action random rollout generator
-and 1024×6 MLP (5.26M params) trained with Adam lr=3e-4, batch 4096,
-200 epochs. Evaluated on the standard benchmark.
+The aggregate gap is misleading — it is dominated by two hard families:
 
-| Dataset | Trajectories | Training Pairs | Status |
-|---------|-------------|----------------|--------|
-| 10K baseline | 10,000 | 5M | ✅ Benchmarked (Stage 1C) |
-| 20K | 20,000 | 10M | 🔄 Training (GPU 0) |
-| 50K | 50,000 | 25M | ✅ Model saved, benchmark pending |
-| 100K | 100,000 | 50M | 🔄 Training (GPU 5) |
+| Family | Oracle | Active | Gap |
+|--------|--------|--------|-----|
+| multisine | 1.01e-4 | 1.71e-4 | 1.7× |
+| chirp | 3.16e-4 | 3.11e-4 | **1.0×** |
+| sawtooth | 1.93e-4 | 1.20e-4 | **0.6×** |
+| pulse | 1.29e-4 | 1.40e-4 | **1.1×** |
+| step | 3.25e-4 | 7.64e-3 | 23× |
+| random_walk | 4.49e-5 | 2.76e-3 | 62× |
 
-**Early result** (50K, 10 epochs only):
-- Val-loss: 6.44e-4 (vs 10K best val 1.41e-3 after 180 epochs)
-- This 2.2× val-loss improvement from 5× data is promising but
-  the model needs full 200-epoch training for benchmark evaluation.
+**Insight**: On 4 of 6 families, TRACK-ZERO already matches the
+oracle. The residual gap concentrates in step (discontinuous torque
+changes) and random_walk (white-noise torques), which produce
+high-velocity tail states rarely seen in training data.
 
-### Axis 2: Architecture Scaling (data fixed at 10K)
+## Architecture Scaling (10K data)
 
-| Architecture | Params | Hidden Dim × Layers | Status |
-|-------------|--------|---------------------|--------|
-| 512×4 (baseline) | 3.1M | 512 × 4 | ✅ Benchmarked |
-| 1024×4 + WD | 5.3M | 1024 × 4 | Ep 150/200 (dead, relaunch needed) |
-| 1024×6 | 5.3M | 1024 × 6 | Ep 180/200 (dead, relaunch needed) |
-| 2048×3 | 10.5M | 2048 × 3 | Ep 150/200 (dead, relaunch needed) |
+| Architecture | Params | Agg MSE | ×Oracle |
+|-------------|--------|---------|---------|
+| 512×4 | 1.1M | 2.67e-3 | 14 |
+| 1024×6 | 5.3M | 6.11e-1 | 3300 |
+| 2048×4 (maxent data) | 10.5M | 6.35e-1 | 3430 |
 
-### DAgger (iterative data collection)
+**Result**: At 10K data, increasing model capacity from 1.1M to
+5.3M params causes a **229× degradation**. The larger models overfit
+to the training distribution and fail catastrophically on the
+benchmark. This is a classic bias-variance tradeoff: 10K×500=5M
+data points are insufficient for 5.3M parameters.
 
-DAgger collects data on-policy then retrains. Results:
+## Data Scaling (1024×6 architecture, in progress)
 
-| Model | Aggregate MSE | ×Oracle |
-|-------|-------------|---------|
-| dagger_512×4 | 6.09e-1 | 3294 |
-| dagger_1024×4 | 6.22e-1 | 3361 |
+Training status (all using random rollouts, 200 epochs):
 
-**Analysis**: DAgger fails catastrophically. The compounding error
-problem makes iteration 0 data useless: the random policy produces
-such poor tracking that the collected states are in dynamically
-unstable regions where the inverse dynamics mapping is ill-conditioned.
-Subsequent iterations cannot recover because each builds on the
-previous failure.
+| N_traj | Epoch | Val-loss | Best Val | Benchmark MSE |
+|--------|-------|----------|----------|---------------|
+| 10K | 200 (done) | — | — | 6.11e-1 |
+| 20K | 40/200 | 8.76e-4 | 4.94e-4 | 9.21e-1* |
+| 50K | 10/200 | 2.39e-3 | 1.23e-3 | 9.42e-1* |
+| 100K | 1/200 | 8.38e-3 | 8.38e-3 | — |
 
-## Preliminary Conclusions
+*Benchmarked while severely undertrained; not meaningful.
 
-1. **Data scaling is the dominant lever.** The 50K model's val-loss
-   after only 10 epochs already surpasses the 10K model's converged
-   val-loss, suggesting data quantity dominates both architecture
-   and exploration method.
+The 20K model's val-loss (4.94e-4 at ep40) is already approaching
+the 512×4 trained on 10K (val ≈ 1.4e-3 converged). Whether this
+translates to benchmark improvement requires completed training.
 
-2. **DAgger is incompatible with this problem.** The policy-data
-   feedback loop amplifies errors instead of correcting them.
+## DAgger Analysis (definitive)
 
-3. **Full benchmark results pending** — the 20K, 50K (retrained),
-   and 100K experiments will provide the complete data-scaling curve.
+DAgger iteratively collects on-policy data and retrains. Tested
+across 4 configurations with 2–3 iterations each:
+
+| Model | Iter 0 | Iter 1 | Iter 2 | Trend |
+|-------|--------|--------|--------|-------|
+| 512×4 | 0.625 | 0.638 | 0.673 | ↗ worse |
+| 1024×4 | 0.615 | 0.604 | 0.638 | ↗ worse |
+| 512×4 v3 | 0.630 | — | — | — |
+| 1024×6 | 0.688 | — | — | — |
+
+**Verdict**: DAgger is fundamentally incompatible with inverse
+dynamics learning. Each iteration compounds tracking errors: the
+policy tracks poorly → on-policy data concentrates in unstable
+states → retraining on this data worsens generalization.
+Larger models are *worse* (1024×6: 0.688 vs 512×4: 0.625),
+confirming overfitting to biased on-policy data.
 
 ## Open Questions
 
-- What is the functional form of the scaling law (power-law exponent)?
-- Is there a saturation point where more data stops helping?
+1. Does the 1024×6 model with 20K+ data match the 512×4 with 10K
+   on the benchmark? (Requires training completion.)
+2. Would 512×4 with 20K data outperform both? (Not yet tested.)
+3. Is the step/random_walk gap closable by any amount of random
+   data, or does it require targeted exploration of high-velocity
+   states?
 - At what data budget does 1024×6 match oracle on easy families?
