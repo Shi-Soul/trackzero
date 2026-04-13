@@ -68,7 +68,7 @@ def main():
     s_tp1 = train_s[:, 1:].reshape(-1, 4)
     u_t = train_a.reshape(-1, 2)
     X = np.concatenate([s_t, s_tp1], axis=-1).astype(np.float32)
-    Y = (u_t / tau_max).astype(np.float32)
+    Y = u_t.astype(np.float32)  # raw torques
     print(f"Training pairs: {len(X)}")
 
     # Validation data (same as other experiments)
@@ -79,7 +79,7 @@ def main():
     val_stp1 = val_s[:, 1:].reshape(-1, 4)
     val_ut = val_a.reshape(-1, 2)
     val_X = np.concatenate([val_st, val_stp1], axis=-1).astype(np.float32)
-    val_Y = (val_ut / tau_max).astype(np.float32)
+    val_Y = val_ut.astype(np.float32)  # raw torques
 
     model = InverseDynamicsMLP(
         state_dim=4, action_dim=2,
