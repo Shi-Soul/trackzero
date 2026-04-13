@@ -9,7 +9,6 @@ from trackzero.config import load_config
 from trackzero.data.random_rollout import generate_random_rollout_data
 from trackzero.data.dataset import TrajectoryDataset
 from trackzero.data.ood_references import generate_ood_reference_data
-from torch.utils.data import TensorDataset, DataLoader
 from trackzero.policy.mlp import InverseDynamicsMLP
 
 def main():
@@ -87,10 +86,14 @@ def main():
     ).to(device)
     print(f"Model: {args.hidden_dim}x{args.n_hidden} ({sum(p.numel() for p in model.parameters()):,} params)")
 
-    train_ds = TensorDataset(torch.from_numpy(X), torch.from_numpy(Y))
-    val_ds_t = TensorDataset(torch.from_numpy(val_X), torch.from_numpy(val_Y))
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
-    val_loader = DataLoader(val_ds_t, batch_size=args.batch_size*2, num_workers=0, pin_memory=True)
+    # Move all data to GPU (avoids CPU→GPU transfer overhead per batch)
+    X_train = torch.from_numpy(X).to(device)
+    Y_train = torch.from_numpy(Y).to(device)
+    X_val_t = torch.from_numpy(val_X).to(device)
+    Y_val_t = torch.from_numpy(val_Y).to(device)
+    N_train, N_val = len(X_train), len(X_val_t)
+    bs = args.batch_size
+    bs_val = bs * 2
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
@@ -101,9 +104,11 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         model.train()
+        perm = torch.randperm(N_train, device=device)
         total_loss, n = 0, 0
-        for xb, yb in train_loader:
-            xb, yb = xb.to(device), yb.to(device)
+        for i in range(0, N_train, bs):
+            idx = perm[i:i+bs]
+            xb, yb = X_train[idx], Y_train[idx]
             pred = model(xb)
             loss = criterion(pred, yb)
             optimizer.zero_grad()
@@ -116,8 +121,9 @@ def main():
         model.eval()
         total_loss, n = 0, 0
         with torch.no_grad():
-            for xb, yb in val_loader:
-                xb, yb = xb.to(device), yb.to(device)
+            for i in range(0, N_val, bs_val):
+                xb = X_val_t[i:i+bs_val]
+                yb = Y_val_t[i:i+bs_val]
                 loss = criterion(model(xb), yb)
                 total_loss += loss.item() * len(xb)
                 n += len(xb)

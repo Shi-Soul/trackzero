@@ -99,6 +99,7 @@ def main():
     parser = argparse.ArgumentParser(description="TRACK-ZERO Standard Benchmark")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--output", default="outputs/standard_benchmark.json")
+    parser.add_argument("--filter", nargs="*", help="Only evaluate models matching these substrings")
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
@@ -157,10 +158,14 @@ def main():
         # Targeted exploration
         "bangbang_augmented_512x4": ("outputs/bangbang_augmented_512x4/best_model.pt", 512, 4),
         "bangbang_augmented_1024x6": ("outputs/bangbang_augmented_1024x6/best_model.pt", 1024, 6),
+        "bangbang_512x4_fixed": ("outputs/bangbang_512x4_fixed/best_model.pt", 512, 4),
     }
 
     # Filter to existing models
     models = {k: v for k, v in models.items() if os.path.exists(v[0])}
+    if args.filter:
+        models = {k: v for k, v in models.items()
+                  if any(f in k for f in args.filter)}
     print(f"\nEvaluating {len(models)} models on benchmark...")
 
     all_results = {}
