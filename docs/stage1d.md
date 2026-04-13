@@ -66,18 +66,40 @@ data points are insufficient for 5.3M parameters.
 
 Training status (all using random rollouts, 200 epochs):
 
-| N_traj | Epoch | Val-loss | Best Val | Benchmark MSE |
-|--------|-------|----------|----------|---------------|
-| 10K | 200 (done) | — | — | 6.11e-1 |
-| 20K | 40/200 | 8.76e-4 | 4.94e-4 | 9.21e-1* |
-| 50K | 10/200 | 2.39e-3 | 1.23e-3 | 9.42e-1* |
-| 100K | 1/200 | 8.38e-3 | 8.38e-3 | — |
+| N_traj | Epoch | Best Val | Notes |
+|--------|-------|----------|-------|
+| 10K | 200 (done) | — | Benchmark: 6.11e-1 (3300× oracle) |
+| 20K | 130/200 | 1.77e-4 | Near oracle val; benchmark pending |
+| 50K | 40/200 | 1.79e-4 | Already at oracle val; training faster |
+| 100K | 10/200 | 7.32e-4 | Early; expect good convergence |
 
-*Benchmarked while severely undertrained; not meaningful.
+Key observation: 50K reaches oracle-level val-loss (1.79e-4) at
+epoch 40, while 20K takes 130 epochs for comparable val (1.77e-4).
+More data → faster convergence, as expected. The critical question
+is whether low val-loss translates to good *benchmark* performance,
+given that benchmark difficulty correlates with velocity not
+in-distribution generalization.
 
-The 20K model's val-loss (4.94e-4 at ep40) is already approaching
-the 512×4 trained on 10K (val ≈ 1.4e-3 converged). Whether this
-translates to benchmark improvement requires completed training.
+## 512×4 Data Scaling (new)
+
+| N_traj | Epoch | Best Val | Notes |
+|--------|-------|----------|-------|
+| 10K | 200 (done) | — | Benchmark: 2.67e-3 (14× oracle) |
+| 20K | 10/200 | 5.54e-3 | Just started; ~12 hrs to completion |
+
+## Bangbang Augmentation (velocity coverage test)
+
+Training a 512×4 model on 5K bangbang (high-velocity) + 5K random
+trajectories. The bangbang data has 13× more |vel|>10 coverage
+(9.24% vs 0.72%) and 36× more |vel|>15 coverage (1.44% vs 0.04%).
+
+| Epoch | Val | Notes |
+|-------|-----|-------|
+| 20/200 | 8.08e-3 | Still converging; ~6 hrs remaining |
+
+If this model closes the step/random_walk gap, it proves the
+oracle gap is a pure coverage problem solvable by targeted data
+augmentation rather than brute-force scaling.
 
 ## DAgger Analysis (definitive)
 

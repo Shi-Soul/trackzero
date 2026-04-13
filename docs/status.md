@@ -1,28 +1,33 @@
 # Experiment Status
 
-## Active Training (as of benchmark v4 completion)
+## Active Training
 
-| GPU | Experiment | Arch | Data | Epoch | Best Val | Est. Remaining |
-|-----|-----------|------|------|-------|----------|----------------|
-| 0 | random_20k v5 | 1024×6 | 20K | 40/200 | 4.94e-4 | ~16 hrs |
-| 1 | random_50k v6 | 1024×6 | 50K | 10/200 | 1.23e-3 | ~30 hrs |
-| 7 | random_100k v4 | 1024×6 | 100K | 1/200 | 8.38e-3 | ~80 hrs |
+| GPU | Experiment | Arch | Data | Epoch | Best Val | ETA |
+|-----|-----------|------|------|-------|----------|-----|
+| ? | 20K random (original) | 1024×6 | 20K | 130/200 | 1.77e-4 | ~4 hrs |
+| ? | bangbang augmented | 512×4 | 10K | 20/200 | 8.08e-3 | ~6 hrs |
+| ? | 20K random | 512×4 | 20K | 10/200 | 5.54e-3 | ~12 hrs |
+| ? | 50K random | 1024×6 | 50K | 40/200 | 1.79e-4 | ~28 hrs |
+| ? | 100K v3 | 1024×6 | 100K | 10/200 | 7.32e-4 | ~3 days |
 
-DAgger runs (GPU 5, 7) may still be iterating but produce
-consistently bad results (0.6+ aggregate); not worth monitoring.
+Note: Multiple 1024×6 runs (v2-v6) share `random_20k_1024x6/`
+checkpoint dir, causing overwrites. The most advanced run (ep130,
+val 1.77e-4) should eventually produce the best checkpoint.
+All 8 GPUs have processes with non-zero memory usage.
 
-## Completed Benchmark v4
+## Key Pending Results
 
-23 models evaluated. See `outputs/standard_benchmark_v4.json`.
-Full ranking in [stage1d.md](stage1d.md).
+1. **Bangbang augmentation** — tests velocity coverage hypothesis.
+   If step/random_walk gap closes, proves the tail phenomenon
+   is purely a data coverage issue. Most important pending result.
+2. **20K random (1024×6)** — first complete data scaling point.
+   Val loss (1.77e-4) already at oracle level; benchmark pending.
+3. **20K random (512×4)** — arch × data interaction. Critical for
+   determining optimal configuration.
 
-## GPU Utilization
+## Completed Analyses
 
-GPUs 2, 3, 4 have zombie processes (~1–6 GB) but low utilization.
-Reclaimable for new experiments.
-
-## Immediate Next Steps
-
-1. Wait for 20K training → benchmark → first scaling data point
-2. Launch 512×4 with 20K data (critical: test architecture × data)
-3. Kill zombie processes, reclaim GPUs 2–4
+- Standard Benchmark v4: 23 models, see stage1d.md
+- Velocity-error correlation: r=0.50 log-log
+- Velocity bucket analysis: <10 rad/s = 0.5-1.7× oracle,
+  15-20 rad/s = 57.7× oracle

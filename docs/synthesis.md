@@ -41,17 +41,28 @@ from a small fraction of outlier trajectories where errors are
 torques drive the system into high-velocity states rarely seen
 in training. On smooth families, max/med is only 19–45×.
 
-**Root cause: high-velocity data sparsity.** Per-trajectory analysis
-reveals that the worst outliers reach joint velocities of 18–23 rad/s.
-In the 10K random rollout training set:
-- Only 0.01% of samples have |ω₁| > 10 rad/s
-- Only 0.04% have |ω₂| > 15 rad/s
-- Effectively 0% have |ω₂| > 20 rad/s
+**Root cause: high-velocity data sparsity.** Quantitative analysis
+across all 600 benchmark trajectories reveals a clean velocity
+threshold effect:
 
-The inverse dynamics has Coriolis terms ∝ ω², so extrapolation
-error grows quadratically at unseen velocities. The gap is not
-about learning capacity or exploration intelligence — it is about
-the exponential rarity of high-velocity states under random torques.
+| Max velocity (rad/s) | N traj | Mean MSE | ×Oracle |
+|---------------------|--------|----------|---------|
+| [0, 5) | 28 | 1.01e-4 | **0.5×** |
+| [5, 10) | 310 | 3.16e-4 | **1.7×** |
+| [10, 15) | 194 | 1.57e-3 | **8.5×** |
+| [15, 20) | 66 | 1.07e-2 | **57.7×** |
+
+Log-log correlation between max velocity and MSE: r = 0.50.
+Below 10 rad/s, TRACK-ZERO is at or below oracle level.
+Above 15 rad/s, error explodes 58×.
+
+In the 10K random training set, only 0.01% of samples have
+|ω₁| > 10 rad/s and 0.04% have |ω₂| > 15 rad/s. The inverse
+dynamics Coriolis terms scale as ω², so extrapolation error
+grows quadratically at unseen velocities. The gap is not about
+learning capacity or exploration intelligence — it is about
+the exponential rarity of high-velocity states under random
+torques.
 
 ### 2. Exploration strategy < data quantity
 
@@ -95,10 +106,13 @@ appropriate coverage-density tradeoff.
 
 ## Remaining Work
 
-1. **Data scaling curve**: 20K/50K/100K training completion →
-   benchmark → plot MSE vs N_trajectories
-2. **Architecture × data interaction**: does 512×4 with 20K data
-   outperform both 512×4/10K and 1024×6/20K?
-3. **Stage 1E synthesis**: identify which mechanism is essential
-   (data quantity? architecture? exploration?), produce single
-   best configuration, compare against oracle on all families
+1. **Velocity coverage experiment** (bangbang augmentation):
+   10K data with 50% bangbang (high-velocity) + 50% random.
+   Tests whether targeted coverage closes the step/random_walk gap.
+   Training in progress (epoch 20/200, ~6 hrs remaining).
+2. **Data scaling benchmark**: 20K random (1024×6) at epoch 130
+   with val 1.77e-4 — near oracle. Benchmark when training
+   completes (~4 hrs). Also 20K 512×4 and 50K 1024×6 in progress.
+3. **Stage 1E synthesis**: once scaling and coverage experiments
+   complete, identify which mechanism is essential and produce
+   the final configuration.
