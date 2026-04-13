@@ -23,6 +23,7 @@ class InverseDynamicsMLP(nn.Module):
         action_dim: int = 2,
         hidden_dim: int = 256,
         n_hidden: int = 3,
+        dropout: float = 0.0,
     ):
         super().__init__()
         self.state_dim = state_dim
@@ -32,9 +33,13 @@ class InverseDynamicsMLP(nn.Module):
         layers = []
         layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
+        if dropout > 0:
+            layers.append(nn.Dropout(dropout))
         for _ in range(n_hidden - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
+            if dropout > 0:
+                layers.append(nn.Dropout(dropout))
         layers.append(nn.Linear(hidden_dim, action_dim))
         self.net = nn.Sequential(*layers)
 

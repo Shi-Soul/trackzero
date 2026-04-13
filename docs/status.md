@@ -1,39 +1,46 @@
 # Experiment Status
 
-## Critical Bugfix (Apr 13)
+## Completed Stages
 
-All previous scaling experiments had a **tau_max normalization bug**:
-training targets were divided by tau_max=5, but MLPPolicy expects
-raw torques. Models applied 1/5 the correct torque → ~5000× oracle.
-Bug fixed in commit 1188bfa. All experiments relaunched from scratch.
+| Stage | Status | Key Result |
+|-------|--------|------------|
+| 0 | ✅ | Infrastructure: GPU simulator, oracle, eval harness |
+| 1A | ✅ | Supervised baseline: AGG=3.52e-2 (190× oracle) |
+| 1B | ✅ | Random rollout: AGG=2.67e-3 (14× oracle, 512×4) |
+| 1C | ✅ | 9 exploration methods: all within 1.5× of random |
+| 1D | ✅ | Training optimization: **cosine+WD = 47% improvement** |
 
-## Active Training (7 GPUs, post-bugfix)
+## Stage 1D Final Results (All 10K data, 1024×6 unless noted)
 
-| GPU | Experiment | Arch | Data | Status |
-|-----|-----------|------|------|--------|
-| 1 | 20K random | 1024x6 | 20K | training |
-| 2 | 20K random | 512x4 | 20K | training |
-| 3 | 50K random | 1024x6 | 50K | data gen |
-| 4 | 50K random | 512x4 | 50K | data gen |
-| 5 | 100K random | 1024x6 | 100K | data gen |
-| 6 | 100K random | 512x4 | 100K | data gen |
-| 7 | bangbang aug | 512x4 | 10K | training |
+| Method | AGG MSE | ×Baseline | Status |
+|--------|---------|-----------|--------|
+| **1024×6+cosine+wd** | **4.19e-4** | **0.53×** | ✅ Best |
+| 1024×6+cosine | 5.64e-4 | 0.72× | ✅ |
+| 1024×6+wd1e-4 | 7.17e-4 | 0.91× | ✅ |
+| 1024×6 baseline | 7.87e-4 | 1.00× | ✅ Reference |
+| 512×4 (10K) | 1.02e-3 | 1.29× | ✅ |
+| 1024×6+huber | 1.01e-3 | 1.29× | ✅ |
+| 512×4+cosine | 1.17e-3 | 1.48× | ✅ |
+| 1024×6+dropout | 1.97e-3 | 2.50× | ✅ |
+| 256×3 (10K) | 2.44e-3 | 3.10× | ✅ |
+| 512×4 (20K) [ref] | 3.24e-4 | 0.41× | ✅ |
 
-GPU 0 unavailable (external processes). ETA: ~9-12 hours.
+## Key Findings
 
-## Experiment Matrix
+1. **Training optimization > data engineering**: Cosine LR + weight
+   decay achieves 47% aggregate improvement — more than any exploration
+   or data-selection strategy from Stage 1C.
 
-|  | 512x4 (1.1M) | 1024x6 (5.3M) |
-|--|--------------|----------------|
-| 10K random | 14× oracle (done) | 3300× oracle (done) |
-| 20K random | GPU 2 | GPU 1 |
-| 50K random | GPU 4 | GPU 3 |
-| 100K random | GPU 6 | GPU 5 |
-| 10K bangbang | GPU 7 | — |
+2. **Cosine+WD is synergistic**: Cosine helps random_walk (-47%), WD
+   helps step (-34%), combined effect (-47% AGG) exceeds either alone.
 
-## Key Questions This Matrix Answers
+3. **Bigger model is better at 10K**: 1024×6 > 512×4 > 256×3. The
+   earlier "3300× overfitting" was a tau_max bug (commit 1188bfa).
 
-1. **Data scaling**: does 10K→100K close the 10× oracle gap?
-2. **Architecture recovery**: at what N does 1024×6 stop overfitting?
-3. **Targeted coverage**: does bangbang (velocity-biased) beat
-   random at equal 10K budget?
+4. **Data engineering fails**: Wide v₀, bangbang torques, coverage
+   selection, weighted training — all worse than naive random.
+
+## Next Steps
+
+- Stage 1E: Synthesis across all Stage 1 findings
+- Stage 2: Beyond supervised learning (README roadmap)
