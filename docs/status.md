@@ -1,46 +1,37 @@
 # Experiment Status
 
-## Completed Stages
+## Stage Progress
 
-| Stage | Status | Key Result |
-|-------|--------|------------|
-| 0 | ✅ | Infrastructure: GPU simulator, oracle, eval harness |
-| 1A | ✅ | Supervised baseline: AGG=3.52e-2 (190× oracle) |
-| 1B | ✅ | Random rollout: AGG=2.67e-3 (14× oracle, 512×4) |
-| 1C | ✅ | 9 exploration methods: all within 1.5× of random |
-| 1D | ✅ | Training optimization: **cosine+WD = 47% improvement** |
+| Stage | Status | Key Result | Doc |
+|-------|--------|------------|-----|
+| 0 | ✅ | Infrastructure: GPU simulator, oracle, eval harness | stage0.md |
+| 1A | ✅ | Supervised baseline: AGG=3.52e-2 (190× oracle) | stage1a.md |
+| 1B | ✅ | Random rollout: AGG=2.67e-3 (14× oracle) | stage1b.md |
+| 1C | ✅ | 9 exploration methods: all within 1.5× of random | stage1c.md |
+| 1D | ✅ | Cosine+WD: AGG=4.19e-4 (47% improvement) | stage1d.md |
+| 2A | ✅ | MLP 5× better than oracle under noise (σ≥0.01) | stage2.md |
+| 2C | ✅ | Noise augmentation: precision-robustness tradeoff | stage2.md |
+| 3A | 🔄 | 3-link: 172× oracle (vs 9× for 2-link). 5-link pending | stage3.md |
 
-## Stage 1D Final Results (All 10K data, 1024×6 unless noted)
+## Best 2-Link Results
 
-| Method | AGG MSE | ×Baseline | Status |
-|--------|---------|-----------|--------|
-| **1024×6+cosine+wd** | **4.19e-4** | **0.53×** | ✅ Best |
-| 1024×6+cosine | 5.64e-4 | 0.72× | ✅ |
-| 1024×6+wd1e-4 | 7.17e-4 | 0.91× | ✅ |
-| 1024×6 baseline | 7.87e-4 | 1.00× | ✅ Reference |
-| 512×4 (10K) | 1.02e-3 | 1.29× | ✅ |
-| 1024×6+huber | 1.01e-3 | 1.29× | ✅ |
-| 512×4+cosine | 1.17e-3 | 1.48× | ✅ |
-| 1024×6+dropout | 1.97e-3 | 2.50× | ✅ |
-| 256×3 (10K) | 2.44e-3 | 3.10× | ✅ |
-| 512×4 (20K) [ref] | 3.24e-4 | 0.41× | ✅ |
+| Method | AGG MSE | vs Oracle |
+|--------|---------|-----------|
+| Oracle (mj_inverse) | 7.63e-5 | 1.0× |
+| Residual MLP (oracle input) | 1.95e-5 | 0.26× (better) |
+| Stage 1 best (1024×6+cosine+WD) | 4.19e-4 | 5.5× |
+| Noise-augmented MLP | 1.39e-1 | 1,823× |
 
 ## Key Findings
 
-1. **Training optimization > data engineering**: Cosine LR + weight
-   decay achieves 47% aggregate improvement — more than any exploration
-   or data-selection strategy from Stage 1C.
+1. **MLP has implicit noise robustness**: smooth function approximation
+   filters noisy references better than exact inverse dynamics.
+2. **Oracle gap widens with DOF**: 9× for 2-link → 172× for 3-link.
+3. **Residual architecture achieves 3.9× better than oracle** (but
+   requires oracle at inference time).
+4. **Noise augmentation works but is blunt**: clean precision drops 78×,
+   noisy tracking improves 4.5×.
 
-2. **Cosine+WD is synergistic**: Cosine helps random_walk (-47%), WD
-   helps step (-34%), combined effect (-47% AGG) exceeds either alone.
+## Active Experiments
 
-3. **Bigger model is better at 10K**: 1024×6 > 512×4 > 256×3. The
-   earlier "3300× overfitting" was a tau_max bug (commit 1188bfa).
-
-4. **Data engineering fails**: Wide v₀, bangbang torques, coverage
-   selection, weighted training — all worse than naive random.
-
-## Next Steps
-
-- Stage 1E: Synthesis across all Stage 1 findings
-- Stage 2: Beyond supervised learning (README roadmap)
+- 5-link chain training (ETA ~20 min)

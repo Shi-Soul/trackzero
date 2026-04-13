@@ -148,10 +148,14 @@ def main():
         "dagger_512x4_iter0": ("outputs/dagger_benchmark_512x4/iter0_best.pt", 512, 4),
         "dagger_512x4_iter1": ("outputs/dagger_benchmark_512x4/iter1_best.pt", 512, 4),
         "dagger_512x4_iter2": ("outputs/dagger_benchmark_512x4/iter2_best.pt", 512, 4),
-        # Data scaling experiments
+        # Data scaling experiments (1024×6)
+        "random_2k_1024x6": ("outputs/random_2k_1024x6/best_model.pt", 1024, 6),
+        "random_5k_1024x6": ("outputs/random_5k_1024x6/best_model.pt", 1024, 6),
+        "random_10k_1024x6": ("outputs/random_10k_1024x6/best_model.pt", 1024, 6),
         "random_20k_1024x6": ("outputs/random_20k_1024x6/best_model.pt", 1024, 6),
         "random_50k_1024x6": ("outputs/random_50k_1024x6/best_model.pt", 1024, 6),
         "random_100k_1024x6": ("outputs/random_100k_1024x6/best_model.pt", 1024, 6),
+        # Data scaling experiments (512×4)
         "random_20k_512x4": ("outputs/random_20k_512x4/best_model.pt", 512, 4),
         "random_50k_512x4": ("outputs/random_50k_512x4/best_model.pt", 512, 4),
         "random_100k_512x4": ("outputs/random_100k_512x4/best_model.pt", 512, 4),

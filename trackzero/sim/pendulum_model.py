@@ -1,4 +1,4 @@
-"""Generate MuJoCo XML for a double pendulum from config."""
+"""Generate MuJoCo XML for planar chain models (2-link to N-link) from config."""
 
 from __future__ import annotations
 
@@ -12,14 +12,15 @@ _INTEGRATOR_MAP = {
 }
 
 
-def build_pendulum_xml(
+def build_chain_xml(
+    n_links: int = 2,
     pend: PendulumConfig | None = None,
     sim: SimulationConfig | None = None,
 ) -> str:
-    """Return a MuJoCo XML string for a planar double pendulum.
+    """Return MuJoCo XML for a planar N-link serial chain.
 
-    The pendulum swings in the x-z plane. Joint axes are along y.
-    Each link is a capsule with mass concentrated at its center.
+    Generalizes the double pendulum to arbitrary chain length.
+    Each link is a capsule with identical mass/inertia, connected by hinge joints.
     """
     if pend is None:
         pend = PendulumConfig()
@@ -36,8 +37,36 @@ def build_pendulum_xml(
     dt = sim.dt
     integrator = _INTEGRATOR_MAP.get(sim.integrator, "RK4")
 
+    # Build nested body XML for N links
+    indent = "    "
+    body_lines = []
+    close_lines = []
+    for i in range(1, n_links + 1):
+        depth = i + 1
+        prefix = indent * depth
+        pos = '0 0 0' if i == 1 else f'0 0 -{L}'
+        body_lines.append(f'{prefix}<body name="link{i}" pos="{pos}">')
+        body_lines.append(f'{prefix}  <joint name="joint{i}" type="hinge"/>')
+        body_lines.append(
+            f'{prefix}  <inertial pos="0 0 -{half_L}" mass="{m}"'
+            f' diaginertia="{ix} {iy} {iz}"/>'
+        )
+        body_lines.append(f'{prefix}  <geom name="geom{i}" fromto="0 0 0 0 0 -{L}"/>')
+        close_lines.append(f'{prefix}</body>')
+
+    bodies_xml = "\n".join(body_lines) + "\n" + "\n".join(reversed(close_lines))
+
+    # Build actuator XML
+    actuator_lines = []
+    for i in range(1, n_links + 1):
+        actuator_lines.append(
+            f'    <motor name="motor{i}" joint="joint{i}" ctrllimited="true"'
+            f' ctrlrange="{-tau} {tau}"/>'
+        )
+    actuators_xml = "\n".join(actuator_lines)
+
     xml = f"""\
-<mujoco model="double_pendulum">
+<mujoco model="chain_{n_links}link">
   <option gravity="0 0 -{g}" timestep="{dt}" integrator="{integrator}"/>
 
   <default>
@@ -46,27 +75,23 @@ def build_pendulum_xml(
   </default>
 
   <worldbody>
-    <!-- Pivot fixed at origin -->
-    <body name="link1" pos="0 0 0">
-      <joint name="joint1" type="hinge"/>
-      <inertial pos="0 0 -{half_L}" mass="{m}"
-                diaginertia="{ix} {iy} {iz}"/>
-      <geom name="geom1" fromto="0 0 0 0 0 -{L}"/>
-      <body name="link2" pos="0 0 -{L}">
-        <joint name="joint2" type="hinge"/>
-        <inertial pos="0 0 -{half_L}" mass="{m}"
-                  diaginertia="{ix} {iy} {iz}"/>
-        <geom name="geom2" fromto="0 0 0 0 0 -{L}"/>
-      </body>
-    </body>
+{bodies_xml}
   </worldbody>
 
   <actuator>
-    <motor name="motor1" joint="joint1" ctrllimited="true"
-           ctrlrange="{-tau} {tau}"/>
-    <motor name="motor2" joint="joint2" ctrllimited="true"
-           ctrlrange="{-tau} {tau}"/>
+{actuators_xml}
   </actuator>
 </mujoco>
 """
     return xml
+
+
+def build_pendulum_xml(
+    pend: PendulumConfig | None = None,
+    sim: SimulationConfig | None = None,
+) -> str:
+    """Return a MuJoCo XML string for a planar double pendulum.
+
+    Convenience wrapper around build_chain_xml with n_links=2.
+    """
+    return build_chain_xml(n_links=2, pend=pend, sim=sim)
