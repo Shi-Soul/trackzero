@@ -13,3 +13,5 @@ build/
 *.gif
 .venv/
 venv/
+AGENTS.md
+MUJOCO_LOG.TXT
