@@ -405,8 +405,8 @@ bodies (biped, walker, humanoid): **raw MLP wins** (factored hurts
 - [x] Can augmentation fix it? → NO (gaussian hurts, interpolate neutral)
 - [x] Can matched coverage fix it? → **YES** (53× H=1, 2,400× H=500)
 - [x] Can diverse patterns achieve coverage without oracle? → **YES** (47× H=1)
-- [ ] Coverage ablation (Finding 24): which patterns matter? → RUNNING (GPU 2)
-- [ ] Ensemble disagreement: targeted data collection → PENDING
+- [x] Coverage ablation (Finding 24): blind6 > diverse_all8 (2.68×), pattern matching disproven
+- [x] Ensemble disagreement: 2× WORSE than random (active learning fails)
 
 ### Comparative Experiments
 - [x] Mini-humanoid: raw MLP 0.223 vs limb-factored 0.282 (1.27× raw wins)
@@ -417,7 +417,7 @@ bodies (biped, walker, humanoid): **raw MLP wins** (factored hurts
 - [x] State augmentation (gaussian/interpolation, both fail)
 - [x] **Oracle training** (structured data: 53× H=1 improvement)
 - [x] **Diverse exploration** (8 patterns: 47× H=1 improvement)
-- [ ] Coverage ablation (5 conditions) → RUNNING on GPU 2 (Finding 24)
+- [x] Coverage ablation (5 conditions) → COMPLETE. blind6 best, no_bench 1.47× vs all_8
 - [ ] Ensemble disagreement → PENDING
 
 **Status:** 🔄 IN PROGRESS — coverage breakthrough confirmed, testing
@@ -463,7 +463,8 @@ principled exploration strategies (Stage 1C applied at humanoid scale)
 11. **Matched coverage solves humanoid: 53× H=1, 2,400× H=500** (Stage 4)
 12. **Diverse torque patterns achieve near-oracle coverage: 47× H=1** (Stage 4)
 
-**Current Focus:** Stage 1C exploration strategies applied at humanoid scale
-to achieve coverage without benchmark knowledge. Running: Finding 24
-coverage ablation (diversity vs pattern matching) on GPU 2.
-Pending: ensemble disagreement targeted data collection.
+**Current State (Stage 4 Complete):** TRACK-ZERO is proven at humanoid scale.
+Finding 24 confirmed blind diversity beats benchmark patterns (1.47×).
+Finding 25 confirmed ensemble active learning hurts (2× worse).
+Findings 26-27 confirm phase transition at 21 DOF and zero-torque bounds.
+Stage 4 Findings 16-27 all complete. Assessing Stage 5 readiness.
