@@ -1,3 +1,6 @@
 [submodule "references/MimicKit"]
 	path = references/MimicKit
 	url = git@github.com:xbpeng/MimicKit.git
+[submodule "references/mjlab"]
+	path = references/mjlab
+	url = git@github.com:mujocolab/mjlab.git
