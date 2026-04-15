@@ -159,6 +159,50 @@ uv run python scripts/run_arch_comparison.py
 uv run python scripts/train_20k_random.py --device cuda:0
 ```
 
+---
+
+### 2.10 Humanoid (Stage 4)
+
+```bash
+# Baseline: random torque data
+CUDA_VISIBLE_DEVICES=0 uv run python -m scripts.run_humanoid
+
+# Stage 1C entropy: diverse torque patterns vs diverse initial states
+CUDA_VISIBLE_DEVICES=1 uv run python -m scripts.run_humanoid_entropy
+
+# Finding 24: diversity vs pattern matching ablation
+CUDA_VISIBLE_DEVICES=2 uv run python -m scripts.run_humanoid_finding24
+```
+
+Results are saved to `outputs/humanoid_*/results.json` and logs to
+`outputs/log_humanoid*.txt`.
+
+---
+
+### 2.11 Simulation visualization (GIF output)
+
+Produces closed-loop rollout GIFs for all trained models across all
+physical bodies and reference types:
+
+```bash
+uv run python scripts/visualize_sim.py
+```
+
+Outputs to `outputs/viz_sim/`:
+
+| File | Content |
+|------|---------|
+| `2dof_step.gif` | All 2-DOF policies vs step reference |
+| `2dof_chirp.gif` | All 2-DOF policies vs chirp reference |
+| `2dof_random_walk.gif` | All 2-DOF policies vs random-walk reference |
+| `chain3_step.gif` | 3-link chain policy vs step reference |
+| `chain3_chirp.gif` | 3-link chain policy vs chirp reference |
+| `chain5_step.gif` | 5-link chain policy vs step reference |
+| `chain5_chirp.gif` | 5-link chain policy vs chirp reference |
+
+Policies visualized (2-DOF): oracle, stage1a, stage1b, stage1d_best,
+stage1d_50k, stage2c_noisy, residual (oracle-augmented input).
+
 
 ## 3. Running the Test Suite
 
