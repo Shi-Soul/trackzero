@@ -330,14 +330,22 @@ All ratios within this ablation are valid. To convert: H1_21D ≈ H1_54D / 2.5
 
 **Results** (N=2000 traj, 1M pairs per ablation, 1024×4 MLP, 200 epochs):
 
-| Config | H1_AGG (21D joint MSE) | vs diverse_all8 | Conclusion |
-|--------|------------------------|-----------------|------------|
-| diverse_all8 | *pending* | 1.00× (baseline) | sanity check |
-| **blind6** | *pending* | *pending* | key result |
-| eval_like2 | *pending* | *pending* | upper bound |
-| white_only | *pending* | *pending* | lower bound |
+| Config | H1_AGG (21D joint MSE) | vs diverse_all8 | H500_AGG |
+|--------|------------------------|-----------------|----------|
+| diverse_all8 | 5.00e-04 | 1.00× (baseline) | 69.9 |
+| **blind6** | **1.86e-04** | **2.7× better** | **69.6** |
+| eval_like2 | *pending* | *pending* | *pending* |
+| white_only | *pending* | *pending* | *pending* |
 
-*Experiment running on GPU 2 — results will update this table.*
+**Preliminary interpretation** (2/4 ablations done):
+`blind6` (no step/chirp) is **2.7× better** than `diverse_all8` on H1.
+This is the **opposite** of pattern-matching — excluding the benchmark
+patterns actually *improves* the result. This strongly suggests the
+improvement comes from **general state-space diversity**, not from
+matching evaluation patterns. step/chirp patterns may cause overfitting
+to specific trajectory shapes at the expense of broader coverage.
+
+*eval_like2 and white_only still running on GPU 2.*
 
 ---
 
