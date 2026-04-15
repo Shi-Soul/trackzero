@@ -167,15 +167,24 @@ uv run python scripts/train_20k_random.py --device cuda:0
 # Baseline: random torque data
 CUDA_VISIBLE_DEVICES=0 uv run python -m scripts.run_humanoid
 
-# Stage 1C entropy: diverse torque patterns vs diverse initial states
-CUDA_VISIBLE_DEVICES=1 uv run python -m scripts.run_humanoid_entropy
+# Stage 4 canonical: coverage ablation (no_bench vs all_8 vs oracle_matched)
+CUDA_VISIBLE_DEVICES=2 uv run python -m scripts.run_coverage_ablation
 
-# Finding 24: diversity vs pattern matching ablation
+# Finding 24: diversity vs pattern matching (confirmatory)
 CUDA_VISIBLE_DEVICES=2 uv run python -m scripts.run_humanoid_finding24
+
+# Finding 28: MPC replanning stability (K=1,5,10,25,100,500)
+CUDA_VISIBLE_DEVICES=2 uv run python -m scripts.run_humanoid_finding28
+
+# Finding 29: static balance test (hold upright 1000 steps)
+CUDA_VISIBLE_DEVICES=7 uv run python -m scripts.run_humanoid_finding29
+
+# Finding 30: amplitude generalization (bench_small → gait_medium → gait_large)
+CUDA_VISIBLE_DEVICES=3 uv run python -m scripts.run_humanoid_finding30
 ```
 
-Results are saved to `outputs/humanoid_*/results.json` and logs to
-`outputs/log_humanoid*.txt`.
+All results are saved to `outputs/humanoid_*/results.json` and logs to
+`outputs/log_finding*.txt`. Use `CUDA_VISIBLE_DEVICES=N` to assign GPU.
 
 ---
 
@@ -247,3 +256,6 @@ Then pass `--gpu-sim` and `--gpu-device cuda:0` to any training script that supp
 | Best Stage 1D (2 DOF) | `standard_benchmark.py` | AGG ≈ 6.8e-4 |
 | Factored arch (3-link) | `run_structured.py` | AGG ≈ 3.3e-3 |
 | Factored arch (5-link) | `run_structured.py` | AGG ≈ 1.9e-2 |
+| Humanoid random baseline | `run_humanoid.py` | H1 AGG ≈ 3278 |
+| Humanoid no_bench (canonical) | `run_coverage_ablation.py` | H1 AGG ≈ 50.7 (54D flat MSE) |
+| Humanoid oracle_matched | `run_coverage_ablation.py` | H1 AGG ≈ 62.0 |

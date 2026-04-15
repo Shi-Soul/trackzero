@@ -6,39 +6,42 @@
 
 ## 1. 问题设定
 
-以双摆为例，系统状态、控制量分别记为
+### 1.1 通用框架
+
+设系统广义坐标 $q \in \mathbb{R}^{n_q}$，广义速度 $\dot q \in \mathbb{R}^{n_q}$，控制力矩 $u \in \mathbb{R}^{n_u}$。连续时间动力学写成标准机械系统形式：
 
 $$
-x_t = \begin{bmatrix} q_t \\ \dot q_t \end{bmatrix} \in \mathbb{R}^4,
-\qquad
-q_t \in \mathbb{R}^2,\ \dot q_t \in \mathbb{R}^2,
-\qquad
-u_t \in \mathbb{R}^2.
+M(q)\ddot q + C(q,\dot q)\dot q + g(q) + D\dot q = B u,
 $$
 
-控制受力矩约束：
-
-$$
-u_t \in \mathcal U
-= \left\{u \in \mathbb{R}^2 : \|u\|_\infty \le \tau_{\max}\right\}.
-$$
-
-连续时间动力学写成标准机械系统形式：
-
-$$
-M(q)\ddot q + C(q,\dot q)\dot q + g(q) + D\dot q = u,
-$$
-
-其中 $M(q)$ 是质量矩阵，$C(q,\dot q)\dot q$ 是科氏/离心项，$g(q)$ 是重力项，$D\dot q$ 是阻尼项。  
+其中 $M(q)$ 是质量矩阵，$C(q,\dot q)\dot q$ 是科氏/离心项，$g(q)$ 是重力项，$D\dot q$ 是阻尼项，$B$ 是力矩映射矩阵（对全驱系统 $B=I$）。  
 经仿真器离散化后，一步转移可写为
 
 $$
-x_{t+1} = f_{\Delta t}(x_t, u_t).
+x_{t+1} = f_{\Delta t}(x_t, u_t), \qquad
+x_t = \begin{bmatrix} q_t \\ \dot q_t \end{bmatrix},
+\qquad
+u_t \in \mathcal{U} = \{u : \|u\|_\infty \le \tau_{\max}\}.
 $$
 
-因此，TRACK-ZERO 的基本任务是：
+TRACK-ZERO 的基本任务是：
 
 > 给定当前状态 $x_t$ 和参考下一状态 $x_{t+1}^{\mathrm{ref}}$，输出一个力矩 $u_t$，使系统尽量跟踪参考轨迹。
+
+### 1.2 浮基人形机器人状态表示
+
+对含 $n_q = 21$ 个铰链关节、带自由基座的人形机器人，MuJoCo 使用 `qpos`（28 维：3 位置 + 4 四元数 + 21 关节角）和 `qvel`（27 维：3 线速度 + 3 角速度 + 21 关节速度）表示状态。为使状态向量对神经网络可微，将其展平为
+
+$$
+x_t
+=
+\begin{bmatrix}
+p_t \\ r_t \\ q_t \\ \dot p_t \\ \omega_t \\ \dot q_t
+\end{bmatrix}
+\in \mathbb{R}^{54},
+$$
+
+其中 $p_t \in \mathbb{R}^3$ 为基座质心位置，$r_t = \mathrm{rotvec}(\mathrm{quat}_t) \in \mathbb{R}^3$ 为旋转向量（$\|r_t\|$ 为旋转角，方向为旋转轴），$q_t \in \mathbb{R}^{21}$ 为关节角度，$\dot p_t \in \mathbb{R}^3$ 和 $\omega_t \in \mathbb{R}^3$ 为基座线速度和角速度，$\dot q_t \in \mathbb{R}^{21}$ 为关节速度。控制量 $u_t \in \mathbb{R}^{21}$ 仅作用于铰链关节（自由基座不受驱动）。
 
 ---
 
@@ -98,6 +101,27 @@ $$
 $$
 
 这类数据用于 Stage 0 / Stage 1A 的监督基线评估。
+
+### 2.3 随机力矩过程族
+
+当研究目标从"生成高质量参考"转变为"最大化可行转移覆盖率"时，可用以下六类具有不同时间相关性的随机过程驱动系统，每类以独立关节为粒度独立采样：
+
+| 过程 | 数学描述 |
+|------|---------|
+| 白噪声 (white) | $u_t \overset{\text{i.i.d.}}{\sim} \mathcal{U}(-\tau_{\max},\tau_{\max})$，无时间相关性 |
+| OU 过程 | $u_{t+1} = (1-\theta)u_t + \theta\,\xi_t,\quad \xi_t\sim\mathcal{N}(0,\sigma^2 I)$，指数衰减记忆 |
+| 布朗运动 (brownian) | $u_{t+1} = \mathrm{clip}(u_t + \beta\,\xi_t,\,-\tau_{\max},\,\tau_{\max})$，随机游走 |
+| 多正弦 (sine) | §2.1 所述，多尺度平滑信号 |
+| Bang-bang | $u_{t,i} \in \{-\tau_{\max},+\tau_{\max}\}$，在泊松随机时刻翻转 |
+| 斜坡 (ramp) | 在随机区间内对每个关节线性扫描 $[-\tau_{\max},\tau_{\max}]$ |
+
+这六类过程在频域和时域相关性上构成互补集。设每类过程诱导的转移边缘分布为 $p_k(\mathcal{T})$，则混合数据集的覆盖率可近似表示为
+
+$$
+\mathcal{T}_{\mathrm{mix}} \approx \bigcup_{k=1}^{6} \mathrm{supp}\bigl(p_k(\mathcal{T})\bigr).
+$$
+
+由于各过程在时间相关性上正交，该并集显著大于任何单一过程的支撑集，进而超过与评估分布匹配的 oracle 模式所覆盖的范围（见 §5）。
 
 ---
 
@@ -496,41 +520,34 @@ $$
 
 ### 7.2 轨迹级指标
 
-对一条长度为 $T$ 的轨迹，定义
+对一条长度为 $T$ 的轨迹，理论上的分项误差为
 
 $$
 \mathrm{MSE}_q
 =
 \frac{1}{T}\sum_{t=1}^{T}
 \frac{1}{n_q}\|e_t^q\|_2^2,
-$$
-
-$$
+\qquad
 \mathrm{MSE}_v
 =
 \frac{1}{T}\sum_{t=1}^{T}
-\frac{1}{n_q}\|e_t^v\|_2^2.
+\frac{1}{n_q}\|e_t^v\|_2^2,
 $$
 
-仓库当前评估脚本使用的总误差是
+可组合为 $\mathrm{MSE}_{\mathrm{total}} = \mathrm{MSE}_q + \lambda_v \mathrm{MSE}_v$（$\lambda_v=0.1$）。
+
+**人形机器人实验的简化实现**：由于状态 $x_t \in \mathbb{R}^{54}$ 已展平为欧氏空间向量（§1.2），实验评估直接使用展平状态 MSE：
 
 $$
-\mathrm{MSE}_{\mathrm{total}}
+\mathrm{MSE}_{\mathrm{flat}}
 =
-\mathrm{MSE}_q + \lambda_v \mathrm{MSE}_v,
-\qquad
-\lambda_v = 0.1.
+\frac{1}{T}\sum_{t=1}^{T}
+\frac{1}{54}\bigl\|x_t^{\mathrm{pred}} - x_t^{\mathrm{ref}}\bigr\|_2^2,
 $$
 
-此外还统计
+其中 $x_t^{\mathrm{pred}} = f_{\Delta t}(x_t^{\mathrm{ref}}, \pi_\theta(x_t^{\mathrm{ref}}, x_{t+1}^{\mathrm{ref}}))$ 是策略执行后的实际下一状态。此指标等权处理位置误差与速度误差，省略了旋转角的精确 wrap 操作，适用于正常运动范围内的评估（旋转向量仅在 $\|r\| < \pi$ 内有效）。
 
-$$
-\max_t \|e_t^q\|_\infty,
-\qquad
-\operatorname{percentile}_{95}\!\left(\{|e_t^q|\}_{t=1}^T\right),
-$$
-
-用于识别偶发的大误差尾部。
+H1 单步指标为 $T=1$ 时的 $\mathrm{MSE}_{\mathrm{flat}}$，H500 为 $T=500$ 的开环滚动平均误差。
 
 ---
 

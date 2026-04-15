@@ -445,9 +445,9 @@ principled exploration strategies (Stage 1C applied at humanoid scale)
 ## Summary
 
 **Completed:** Stages 0, 1 (double pendulum), 2 (architecture + robustness),
-3 (DOF scaling + contact + topology)
+3 (DOF scaling + contact + topology), 4 (humanoid coverage experiments)
 
-**In Progress:** Stage 4 (humanoid coverage experiments)
+**In Progress:** Stage 5 (feedback control / practical deployment)
 
 **Major Discoveries (chronological):**
 1. Random rollout > supervised baseline (13×) — coverage wins (Stage 1)
@@ -462,9 +462,15 @@ principled exploration strategies (Stage 1C applied at humanoid scale)
 10. **Humanoid failure is distribution shift, not compounding** (Stage 4)
 11. **Matched coverage solves humanoid: 53× H=1, 2,400× H=500** (Stage 4)
 12. **Diverse torque patterns achieve near-oracle coverage: 47× H=1** (Stage 4)
+13. **Blind diversity beats oracle coverage (no_bench 64.7× > random)** (F24)
+14. **Ensemble active learning hurts (2× worse)** (F25)
+15. **Inverse dynamics ≠ feedback control** (F28, F29): zero torque outperforms
+    all policies at static balance; MPC replanning fails at all horizons
+16. **Training amplitude is a hard constraint** (F32): no_bench collapses 34K×
+    at 5× amplitude; oracle_matched degrades only 3K× (correct motion type wins)
 
-**Current State (Stage 4 Complete):** TRACK-ZERO is proven at humanoid scale.
-Finding 24 confirmed blind diversity beats benchmark patterns (1.47×).
-Finding 25 confirmed ensemble active learning hurts (2× worse).
-Findings 26-27 confirm phase transition at 21 DOF and zero-torque bounds.
-Stage 4 Findings 16-27 all complete. Assessing Stage 5 readiness.
+**Current State (Stage 4 Complete):** TRACK-ZERO proves that blind diversity
+achieves near-oracle inverse dynamics for humanoid (21-DOF) without any motion
+priors. The fundamental limit is now clear: inverse dynamics ≠ feedback
+control. Stage 5 must address stabilization-aware training data and state
+regulation.

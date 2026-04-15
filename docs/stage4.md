@@ -442,56 +442,161 @@ oracle-matched training coverage.
 
 ---
 
-## Finding 28: MPC Replanning with No-Bench Coverage (in progress)
+## Finding 28: MPC Replanning Cannot Rescue Coverage-Improved Models
 
-**Research question**: The coverage breakthrough achieves H1=50.7 (64×
-better than random). Does this translate to stable long-horizon tracking
-when combined with MPC-style replanning?
+**Question**: Does the coverage breakthrough (H1=50.7) translate to
+stable long-horizon tracking with MPC-style replanning?
 
-**Background**: The baseline replan experiment (`run_humanoid_replan.py`,
-random-only data) showed catastrophic failure at ALL horizons (K=5: AGG=
-1.14e12). But that used random_only training data (H1=3278). With no_bench
-(H1=50.7, 65× better), replanning may enable stable tracking.
+**Protocol**: Replan every K steps (reset to reference, re-track).
+3 training configs × 6 horizons K=1,5,10,25,100,500.
 
-**Protocol** (`scripts/run_humanoid_finding28.py`):
-- Train: random_only vs no_bench vs oracle_matched (all 2K traj)
-- Replan horizons K=1,5,10,25,100,500 steps
-- K=1 = oracle correction every step (near-oracle ceiling)
-- K=500 = no replanning (pure closed-loop baseline)
+| Config | K=10 AGG | K=500 AGG | H1 |
+|--------|----------|-----------|-----|
+| random_only | **604** | 2.05e+06 | 27.8 |
+| no_bench | 3.24e+06 | **595** | 17.5 |
+| oracle_matched | 4.39e+08 | 8.59e+07 | 32.6 |
 
-**Hypothesis**: no_bench + K=1 ≈ H1 performance (stable, ~50 MSE);
-no_bench + K=5 may also be stable if per-step error contracts; K≥25
-likely fails for all configs due to compounding beyond the reference
-trajectory stability horizon.
+**Result**: Chaotic and non-monotonic across ALL configs. K=10 helps
+random_only (604 vs 2M at K=500) but hurts no_bench. No consistent
+trend — replanning at one horizon helps, at adjacent horizons it
+catastrophically fails (no_bench K=5: 1.4e9 vs K=10: 3.2e6).
 
-*Results pending — running on GPU 2.*
+**Interpretation**: The humanoid dynamics are sufficiently chaotic
+that replanning cannot provide a reliable improvement. Small per-step
+errors compound unpredictably depending on which states the trajectory
+visits. This confirms Finding 20 at a deeper level: replanning is not
+a viable path to long-horizon stability.
 
 ---
 
-## Finding 29: Static Balance — Can TRACK-ZERO Hold a Humanoid Upright?
-  
-**Research question**: The benchmark trajectories start from random
-falling states — they test chaos tracking, not practical stabilization.
-Can TRACK-ZERO hold the humanoid near its upright equilibrium for 500+
-steps?
+## Finding 29: Static Balance Failure
 
-**Why this matters**: If no_bench cannot balance the humanoid, the H1
-improvement is purely theoretical. If it CAN balance, TRACK-ZERO is
-a practically useful stabilizing controller.
+**Question**: Can TRACK-ZERO hold the humanoid near upright equilibrium?
 
-**Protocol** (`scripts/run_humanoid_finding29.py`):
-- Reference: constant upright pose (initial rest position)
-- Small perturbation at start: joint noise ±0.02 rad, vel noise ±0.05 rad/s
-- Metric: steps upright before height < 0.4m (humanoid starts at 1.4m)
-- 20 trials per config, up to 1000 steps
-- Configs: zero_torque, random_only, no_bench, oracle_matched
+**Protocol**: Constant upright reference, small perturbation (±0.02 rad
+joints, ±0.05 rad/s velocity), 20 trials, measure steps before fall
+(height < 0.4m), max 1000 steps.
 
-**Hypothesis**: zero_torque falls immediately (~5 steps). random_only
-may also fail quickly (H1=3278 means large per-step errors). no_bench
-(H1=50.7) may maintain balance for 100+ steps near the upright pose
-because training data includes near-upright states at trajectory start.
+| Config | Mean Steps | Std | Survived 1000 |
+|--------|-----------|-----|---------------|
+| **zero_torque** | **544** | 126 | 0/20 |
+| no_bench | 490 | 106 | 0/20 |
+| oracle_matched | 407 | 61 | 0/20 |
+| random_only | 311 | 159 | 0/20 |
 
-*Results pending — running on GPU 7.*
+**Result**: ALL configs fail. **Zero-torque (doing nothing) survives
+LONGEST** — the learned model actively destabilizes the humanoid.
+
+**Why**: The model was trained on diverse trajectories and predicts
+nonzero torques even when near-upright. These spurious torques perturb
+the passive stability that the humanoid naturally possesses. The model
+has learned "chaos tracking" but not "equilibrium maintenance."
+
+**Implication**: TRACK-ZERO improves trajectory tracking metrics but
+does not produce a practically useful controller. A separate training
+strategy (e.g., stabilization-specific data) would be needed for
+balance tasks.
+
+---
+
+## Finding 30: Physics-Informed Architectures Fail
+
+**Question**: Does injecting physics structure into the model improve
+inverse dynamics? Five architectural variants tested:
+
+| Architecture | H1 AGG | val_loss | vs baseline |
+|---|---|---|---|
+| baseline (raw MLP) | 20.4 | 18.4 | 1.00× |
+| **accel_feat** (add q̈ input) | **17.8** | 18.4 | **1.15× better** |
+| delta_input (Δs not s) | 40.9 | 19.5 | 0.50× worse |
+| joint_weight (τ_max loss) | 40.8 | 8.9 | 0.50× worse |
+| residual_pd (τ=PD+MLP) | 10,649 | 2.0e+11 | **520× worse** |
+
+**Key results**:
+1. **accel_feat** (13% improvement): Providing explicit acceleration
+   q̈ = (v_{t+1} − v_t)/dt as an extra input helps modestly. This is
+   physically meaningful — Newton's 2nd law relates τ directly to q̈
+   through the mass matrix.
+2. **delta_input**: Replacing absolute s_{t+1} with Δs removes the
+   ability to compute state-dependent terms (gravity, Coriolis) directly.
+3. **residual_pd**: PD gains (K_p=50, K_d=5) produce outputs proportional
+   to state change, overwhelming the MLP residual. Gradient is unstable.
+4. **joint_weight**: Lower val_loss (8.9 vs 18.4) is an artifact of
+   normalized scale; H1 is 2× worse because down-weighting large joints
+   reduces tracking accuracy where it matters most.
+
+**Conclusion**: The plain MLP is nearly optimal. Physics-informed
+architectures provide negligible benefit or actively harm performance.
+
+---
+
+## Finding 31: Torque Scale, Capacity, and Data Quantity Optimization
+
+### Torque Scale
+
+| Scale (×τ_max) | H1 AGG | Interpretation |
+|---|---|---|
+| 0.05 | 121.3 | Too gentle — insufficient exploration |
+| **0.15** | **18.8** | **Optimal** |
+| 0.30 | 50.5 | Too aggressive — unstable states |
+| 0.50 | 91.7 | Catastrophic (H500=4.8e8) |
+
+The optimal torque scale balances two competing requirements: enough
+force to explore diverse states, but not so much that trajectories
+become unstable or physically unreachable for the model.
+
+### Model Capacity
+
+| Architecture | Params | H1 AGG |
+|---|---|---|
+| 512×4 | 0.9M | 71.3 |
+| 1024×4 | 3.3M | 61.1 |
+| **1024×6** | 5.4M | **56.0** |
+| 2048×4 | 12.9M | 68.2 (overfitting) |
+| 1024×4, 400ep | 3.3M | 90.9 (overfitting) |
+
+Capacity is NOT the bottleneck. The 4× wider model (2048) overfits;
+400 epochs overfit. The 1024×4 recipe at 200 epochs sits near the
+optimal bias-variance tradeoff.
+
+### Data Quantity (with torque scale=0.15)
+
+| Trajectories | Pairs | H1 AGG |
+|---|---|---|
+| 1K | 500K | 34.7 |
+| **2K** | **1M** | **18.8** |
+| 5K | 2.5M | 20.9 (worse!) |
+
+Data saturates at 2K trajectories. More data from the same distribution
+doesn't help because coverage (not quantity) is the binding constraint.
+5K has better val_loss (17.9 vs 18.6) but worse H1 — fitting more
+training states doesn't improve generalization to benchmark states.
+
+---
+
+## Finding 32: Amplitude Generalization — Training Scale Is a Hard Constraint
+
+**Question**: Does no_bench generalize to reference trajectories with 5×
+larger amplitude than training (scale 0.15 → 0.75 of τ_max)?
+
+**Protocol** (`scripts/run_humanoid_finding30.py`): Train on scale=0.15 data;
+evaluate on bench_small (0.15), gait_medium (0.40), gait_large (0.75).
+
+| Config | bench_small | gait_medium | gait_large | large/small ratio |
+|--------|------------|-------------|------------|-------------------|
+| random_only | 11.2 | 52.9 | 44,244 | **3,950×** |
+| **no_bench** | **6.0** | **33.4** | 204,373 | **34,062×** |
+| oracle_matched | 6.75 | 35.6 | **20,020** | **2,966×** |
+
+**Key finding**: no_bench (best at small scale) collapses catastrophically at
+large amplitude — 10× WORSE than random, and 10× worse than oracle_matched.
+oracle_matched generalizes best to large amplitude because its patterns (step,
+chirp) are the same motion TYPE as the large-amplitude test trajectories.
+
+**Implication**: Blind diversity beats oracle coverage within the training
+amplitude range, but oracle_matched retains the correct motion TYPE, enabling
+better extrapolation. **Training amplitude must span the deployment amplitude.**
+A Stage 5 solution must train with matched amplitude scale.
 
 ---
 
@@ -520,6 +625,16 @@ near-oracle coverage AND excluding benchmark patterns is BETTER
 TRACK-ZERO achieves optimal performance with zero knowledge of the
 evaluation distribution — benchmark-specific patterns actually hurt.
 
+**H7** ❌ Physics-informed architectures (Finding 30) do NOT improve
+inverse dynamics. Only accel_feat gives a modest 13% gain; residual PD
+diverges catastrophically. The plain MLP's universal approximation is
+more robust than imposing structural assumptions.
+
+**H8** ✅ Hyperparameter optimization reveals clear optima (Finding 31):
+torque scale 0.15, 1024×4, 200 epochs, 2K trajectories. These are
+near-optimal in all dimensions tested — further tuning is unlikely to
+yield meaningful improvements.
+
 ---
 
 ## Stage 4 Summary
@@ -530,17 +645,19 @@ evaluation distribution — benchmark-specific patterns actually hurt.
 — with zero knowledge of the evaluation protocol — achieves near-oracle
 inverse dynamics for 21-DOF humanoid tracking.
 
-**Three-step discovery**:
-1. **Why random fails** (Findings 16-21): H1=3278 with random data, H1=62
-   with oracle-matched. The gap is pure distribution shift, not model
-   capacity or training stability.
-2. **Coverage solves it** (Findings 22-23): Diverse torque patterns (sine,
-   square, chirp, etc.) achieve H1=69.6 — 47× better, within 1.12× of
-   oracle. Entropy selection is unnecessary; simple diversity suffices.
-3. **Blind is optimal** (Findings 24-27): Removing benchmark-specific
-   patterns (step, chirp) IMPROVES performance (1.47×). Ensemble active
-   learning HURTS (2×). Zero-torque baseline H1=76.8 — model is real but
-   modest; trajectory stability is the bottleneck.
+**Four-phase investigation**:
+1. **Failure diagnosis** (Findings 17-21): H1=3278 with random data, H1=62
+   with oracle-matched. The gap is pure distribution shift. Replanning,
+   augmentation, and data scaling do not help.
+2. **Coverage solves it** (Findings 22-24): Diverse torque patterns achieve
+   H1=50.7 (blind, no benchmark knowledge) — 65× better than random, 1.2×
+   better than oracle-matched. Blind diversity is optimal.
+3. **Negative controls** (Findings 25-29): Ensemble active learning hurts
+   (2×). Zero-torque baseline is competitive (76.8). MPC replanning is
+   chaotic. Static balance FAILS — the model destabilizes the humanoid.
+4. **Optimization exhaustion** (Findings 30-31): Physics-informed
+   architectures fail (except 13% from accel_feat). Hyperparameters
+   (torque=0.15, 1024×4, 200ep, 2K traj) are near-optimal.
 
 ### Final Benchmark Numbers (H=1, 54D MSE)
 
@@ -548,20 +665,20 @@ inverse dynamics for 21-DOF humanoid tracking.
 |--------|---------|-----------|
 | random_only (2K traj) | 3,278 | 1.00× |
 | oracle_train (matched) | 62 | **52.9× better** |
-| diverse_random (entropy) | 69.6 | **47.1× better** |
+| diverse_random (8 patterns) | 69.6 | **47.1× better** |
 | **no_bench (blind6)** | **50.7** | **64.7× better** |
-| zero_torque | 76.8 | 42.7× better |
+| zero_torque (no model) | 76.8 | 42.7× better |
+| accel_feat (best architecture) | 17.8 | *optimized recipe* |
 
-**Key insight**: The optimal data strategy (no_bench) requires zero
-information about the evaluation benchmark and outperforms oracle-matched
-training. TRACK-ZERO's goal is fully achieved.
+### What Remains Open
 
-### Stage 5 Directions
+1. **Multi-step context** (in progress): Does trajectory curvature
+   (future reference window k=2,4,8) enable anticipatory dynamics?
+2. **Contact features** (in progress): Do constraint forces (qfrc)
+   provide missing physics beyond binary contact flags?
+3. **Initial state diversity** (in progress): Does matching benchmark's
+   random initial distribution fix the remaining coverage gap?
+4. **Inverse dynamics ≠ control**: The model tracks chaos but cannot
+   balance. Bridging this gap requires fundamentally different data
+   or architectures (stabilization-aware training, error-state input).
 
-- **Finding 28** (in progress): Does the H1 breakthrough translate to
-  long-horizon MPC tracking? Test no_bench + K=1/5/10/25 replanning
-  vs random_only baseline. K=1 should give ≈H1 performance (stable),
-  key question is whether K=5 or K=25 remains stable.
-- Scale to full-body tasks (locomotion, manipulation)  
-- Generalization across body morphologies
-- Comparison against mocap-trained baselines (PHC, AMP) on human motions
