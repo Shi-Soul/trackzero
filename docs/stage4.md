@@ -442,6 +442,59 @@ oracle-matched training coverage.
 
 ---
 
+## Finding 28: MPC Replanning with No-Bench Coverage (in progress)
+
+**Research question**: The coverage breakthrough achieves H1=50.7 (64×
+better than random). Does this translate to stable long-horizon tracking
+when combined with MPC-style replanning?
+
+**Background**: The baseline replan experiment (`run_humanoid_replan.py`,
+random-only data) showed catastrophic failure at ALL horizons (K=5: AGG=
+1.14e12). But that used random_only training data (H1=3278). With no_bench
+(H1=50.7, 65× better), replanning may enable stable tracking.
+
+**Protocol** (`scripts/run_humanoid_finding28.py`):
+- Train: random_only vs no_bench vs oracle_matched (all 2K traj)
+- Replan horizons K=1,5,10,25,100,500 steps
+- K=1 = oracle correction every step (near-oracle ceiling)
+- K=500 = no replanning (pure closed-loop baseline)
+
+**Hypothesis**: no_bench + K=1 ≈ H1 performance (stable, ~50 MSE);
+no_bench + K=5 may also be stable if per-step error contracts; K≥25
+likely fails for all configs due to compounding beyond the reference
+trajectory stability horizon.
+
+*Results pending — running on GPU 2.*
+
+---
+
+## Finding 29: Static Balance — Can TRACK-ZERO Hold a Humanoid Upright?
+  
+**Research question**: The benchmark trajectories start from random
+falling states — they test chaos tracking, not practical stabilization.
+Can TRACK-ZERO hold the humanoid near its upright equilibrium for 500+
+steps?
+
+**Why this matters**: If no_bench cannot balance the humanoid, the H1
+improvement is purely theoretical. If it CAN balance, TRACK-ZERO is
+a practically useful stabilizing controller.
+
+**Protocol** (`scripts/run_humanoid_finding29.py`):
+- Reference: constant upright pose (initial rest position)
+- Small perturbation at start: joint noise ±0.02 rad, vel noise ±0.05 rad/s
+- Metric: steps upright before height < 0.4m (humanoid starts at 1.4m)
+- 20 trials per config, up to 1000 steps
+- Configs: zero_torque, random_only, no_bench, oracle_matched
+
+**Hypothesis**: zero_torque falls immediately (~5 steps). random_only
+may also fail quickly (H1=3278 means large per-step errors). no_bench
+(H1=50.7) may maintain balance for 100+ steps near the upright pose
+because training data includes near-upright states at trajectory start.
+
+*Results pending — running on GPU 7.*
+
+---
+
 ## Hypotheses Revisited
 
 **H1** ✅ Raw MLP beats limb-factored at humanoid scale (confirmed
@@ -505,6 +558,10 @@ training. TRACK-ZERO's goal is fully achieved.
 
 ### Stage 5 Directions
 
+- **Finding 28** (in progress): Does the H1 breakthrough translate to
+  long-horizon MPC tracking? Test no_bench + K=1/5/10/25 replanning
+  vs random_only baseline. K=1 should give ≈H1 performance (stable),
+  key question is whether K=5 or K=25 remains stable.
 - Scale to full-body tasks (locomotion, manipulation)  
 - Generalization across body morphologies
-- Online adaptation during deployment
+- Comparison against mocap-trained baselines (PHC, AMP) on human motions
