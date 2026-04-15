@@ -366,10 +366,21 @@ Based on README.md proposal with actual progress from docs/ (Stage 0-3).
 
 ## Stage 3 Current Investigation
 
-- [ ] Structured dynamics architecture (factored A(q,q̇) @ [Δq; Δv] + b(q,q̇))
-- [ ] Prediction: structured advantage should *increase* with DOF
+- [x] Structured dynamics architecture (factored A(q,q̇) @ [Δq; Δv] + b(q,q̇))
+  - 76× over raw MLP at 3-DOF, 57× at 5-DOF (stage3.md §3C)
+- [x] DOF scaling (2→10 DOF chains, factored advantage 4×→12×)
+- [x] Per-link contact flags (5.5× improvement at 7+ DOF, stage3.md §3H)
+- [x] 2D biped (4 actuated DOF, effective-DOF hypothesis, stage3.md §3F)
+- [x] 3D floating body (8 DOF, weak coupling test, stage3.md §3G)
+- [x] 3D walker (6 actuated DOF, tree topology, stage3.md §3I)
+- [x] Capacity scaling at 10 DOF (1024×4 optimal, stage3.md §3E)
 
-**Status:** ⏳ PENDING (results pending)
+**Key Stage 3 conclusion**: Architecture choice depends on topology.
+Serial chains: factored architecture (12-76× gain). Tree-structured
+bodies (biped, walker, humanoid): **raw MLP wins** (factored hurts
+1.15-1.26×). Per-link contact flags scale favorably (5.5× at 7+ DOF).
+
+**Status:** ✅ COMPLETE (stage3.md)
 
 ---
 
@@ -377,51 +388,82 @@ Based on README.md proposal with actual progress from docs/ (Stage 0-3).
 
 **Goal:** Train humanoid policy without human motion data.
 
-### Code Development Required (Not Started)
-- [ ] Full humanoid model in MuJoCo
-- [ ] Mocap-trained baseline (PHC/AMP equivalent)
-- [ ] Evaluation on AMASS mocap dataset
+### Code Development
+- [x] Full humanoid model in MuJoCo (21 actuated DOF, 54D state)
+- [x] Mini-humanoid (12 DOF) bridge experiment
+- [x] Benchmark generation (3 families × 20 trajectories)
+- [x] Structured/diverse torque data generation
+- [ ] Mocap-trained baseline (PHC/AMP equivalent) — deferred
+- [ ] Evaluation on AMASS mocap dataset — deferred
 
-### Research Problems to Address (Not Started)
-- [ ] Does approach survive 30+ DOF scale?
-- [ ] Contact handling with feet/hands?
-- [ ] Full-body coordination beyond 5-link?
+### Research Problems
+- [x] Does approach survive 21 DOF? → NO with random data, YES with coverage
+- [x] Architecture selection → raw MLP + per-link contact (stage3 recipe)
+- [x] Failure mode diagnosis → distribution shift, NOT compounding error
+- [x] Can data scaling fix it? → NO (5× data: 2.25× H=1, 305× worse H=500)
+- [x] Can replanning fix it? → NO (K=5 best, still catastrophic)
+- [x] Can augmentation fix it? → NO (gaussian hurts, interpolate neutral)
+- [x] Can matched coverage fix it? → **YES** (53× H=1, 2,400× H=500)
+- [x] Can diverse patterns achieve coverage without oracle? → **YES** (47× H=1)
+- [ ] Coverage ablation (Finding 24): which patterns matter? → RUNNING (GPU 2)
+- [ ] Ensemble disagreement: targeted data collection → PENDING
 
-### Comparative Experiments Required (Not Started)
-- [ ] TRACK-ZERO vs mocap-trained on human motions
-- [ ] TRACK-ZERO vs mocap-trained on non-human feasible references
-- [ ] Robustness to perturbations
-- [ ] Generalization to novel motions
+### Comparative Experiments
+- [x] Mini-humanoid: raw MLP 0.223 vs limb-factored 0.282 (1.27× raw wins)
+- [x] Full humanoid horizon sweep (H=1 already fails: AGG=6,181)
+- [x] Data scaling (2K/5K/10K trajectories)
+- [x] Per-timestep error analysis (30-173σ distribution shift)
+- [x] Replanning (K=5-500, all catastrophic)
+- [x] State augmentation (gaussian/interpolation, both fail)
+- [x] **Oracle training** (structured data: 53× H=1 improvement)
+- [x] **Diverse exploration** (8 patterns: 47× H=1 improvement)
+- [ ] Coverage ablation (5 conditions) → RUNNING on GPU 2 (Finding 24)
+- [ ] Ensemble disagreement → PENDING
 
-**Status:** ❌ NOT STARTED
+**Status:** 🔄 IN PROGRESS — coverage breakthrough confirmed, testing
+principled exploration strategies (Stage 1C applied at humanoid scale)
 
 ---
 
 ## Key Hypotheses Status (From README §9)
 
-1. [x] Random rollout data alone is sufficient for high coverage (TESTED & CONFIRMED)
-2. [x] Ensemble disagreement beats state-space density (TESTED & PARTIALLY CONFIRMED)
-3. [ ] Adversarial reference generation reaches feasible boundary (TESTED PARTIALLY, needs deeper analysis)
-4. [x] Hindsight relabeling provides early signal (TESTED & CONFIRMED useful)
-5. [x] Multi-step conditioning outperforms single-step (TESTED & REFUTED — multi-step hurts)
-6. [x] Out-of-dist gap > in-dist gap (TESTED & CONFIRMED core claim)
+1. [x] **Random rollout insufficient** → CONFIRMED at humanoid scale.
+   Random-torque data covers near-standing states; benchmark trajectories
+   are 30-173σ away. H=1 AGG=3,278 vs matched coverage AGG=62.
+2. [x] **Ensemble disagreement > state density** → TESTING (GPU 2).
+   Prior 2-DOF test: marginal difference. Humanoid test in progress.
+3. [ ] **Adversarial reference → feasible boundary** → NOT TESTED at
+   humanoid scale. Lower priority given coverage breakthrough.
+4. [x] **Hindsight relabeling** → FAILED at humanoid (DAgger diverges).
+5. [x] **Multi-step > single-step** → REFUTED. Multi-step monotonically
+   hurts closed-loop tracking at every DOF tested (2-21).
+6. [x] **OOD gap > ID gap** → CONFIRMED. The entire humanoid failure
+   IS the OOD gap — 90,000× worse on benchmark vs training states.
 
 ---
 
 ## Summary
 
-**Completed:** Stages 0, 1 (full), 2 (full), 3A-3B
-**In Progress:** 3C (structured dynamics architecture)
-**Not Started:** Stage 4
+**Completed:** Stages 0, 1 (double pendulum), 2 (architecture + robustness),
+3 (DOF scaling + contact + topology)
 
-**Major Discoveries:**
-- Training recipe (Cosine+WD) is dominant lever in Stage 1 (47% gain)
-- Architecture (Residual PD) dominates data in Stage 2 (14× better for 2K vs 10K)
-- DOF scaling is fundamental bottleneck: ~400× degradation 2→5-link
-- Contact-aware input breakthrough at 2-DOF, collapses at higher DOF
-- Open-loop metrics (validation loss) completely unreliable for closed-loop performance
+**In Progress:** Stage 4 (humanoid coverage experiments)
 
-**Critical Blockers for Humanoid:**
-1. DOF scaling (expressiveness gap, not data gap)
-2. Contact complexity (scalar flags insufficient at higher DOF)
-3. Cross-joint coupling (inertia matrix M(q) requires architectural innovation)
+**Major Discoveries (chronological):**
+1. Random rollout > supervised baseline (13×) — coverage wins (Stage 1)
+2. Cosine LR + WD dominant training lever (47% gain) (Stage 1)
+3. Residual PD architecture: 9.7× at 2 DOF (Stage 2)
+4. Architecture > data: PD@2K beats MLP@10K by 14× (Stage 2)
+5. Multi-step context hurts closed-loop tracking (Stage 2)
+6. Learned policy >> CEM MPC (3,200× accuracy, 38,000× speed) (Stage 2)
+7. Factored dynamics: 76× at 3 DOF, 57× at 5 DOF (Stage 3)
+8. Per-link contact flags: 5.5× at 7+ DOF, nearly eliminates penalty (Stage 3)
+9. Tree topology: raw MLP beats all factored variants (Stage 3)
+10. **Humanoid failure is distribution shift, not compounding** (Stage 4)
+11. **Matched coverage solves humanoid: 53× H=1, 2,400× H=500** (Stage 4)
+12. **Diverse torque patterns achieve near-oracle coverage: 47× H=1** (Stage 4)
+
+**Current Focus:** Stage 1C exploration strategies applied at humanoid scale
+to achieve coverage without benchmark knowledge. Running: Finding 24
+coverage ablation (diversity vs pattern matching) on GPU 2.
+Pending: ensemble disagreement targeted data collection.
