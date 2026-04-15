@@ -440,7 +440,7 @@ def main():
             _make_pendulum_gif(
                 label=ref_type,
                 ref_states=ref_states,
-                rollouts={"chain_policy": actual},
+                rollouts={f"TRACK-ZERO chain{n_links}": actual},
                 xy_fn=lambda q, L=LINK_L: chain_xy(q, L),
                 n_links=n_links,
                 save_path=gif_path,
