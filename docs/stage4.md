@@ -322,7 +322,48 @@ inclusion of step/chirp patterns that match the benchmark.
 - If blind6 ≈ white_only → improvement was **pattern matching**
   → Need truly blind exploration strategy (Stage 1C)
 
-*Results pending — experiment running on GPU 2.*
+**Note on metric**: `run_humanoid_finding24.py` measures MSE on 21D joint
+positions (`flat[6:27]`) only; canonical experiments use full 54D MSE.
+Absolute H1 values are NOT directly comparable to H1=3,278 / H1=69.6.
+All ratios within this ablation are valid. To convert: H1_21D ≈ H1_54D / 2.5
+(approximate empirical scaling — exact depends on velocity error magnitude).
+
+**Results** (N=2000 traj, 1M pairs per ablation, 1024×4 MLP, 200 epochs):
+
+| Config | H1_AGG (21D joint MSE) | vs diverse_all8 | Conclusion |
+|--------|------------------------|-----------------|------------|
+| diverse_all8 | *pending* | 1.00× (baseline) | sanity check |
+| **blind6** | *pending* | *pending* | key result |
+| eval_like2 | *pending* | *pending* | upper bound |
+| white_only | *pending* | *pending* | lower bound |
+
+*Experiment running on GPU 2 — results will update this table.*
+
+---
+
+## Finding 25: Ensemble Disagreement for Targeted Data Collection
+
+**Hypothesis**: Ensemble disagreement identifies regions of high model
+uncertainty, and collecting MORE data near those states improves
+performance without knowing the benchmark distribution.
+
+**Protocol** (`scripts/run_ensemble_disagree.py`):
+1. Train ensemble of 5 models (512×3) on 2K random trajectories
+2. Compute disagreement across ensemble on training states
+3. Collect 1K targeted trajectories starting from high-disagreement states
+4. Retrain 1024×4 model on (2K base + 1K targeted) vs 2K base
+5. Compare H1_AGG on benchmark
+
+| Config | Training Data | H1_AGG (54D MSE) | vs random_only |
+|--------|---------------|-----------------|----------------|
+| random_only | 2K traj (~1M pairs) | *pending* | 1.00× (baseline) |
+| **ensemble_augmented** | 2K + 1K targeted (~1.5M pairs) | *pending* | *pending* |
+
+**Reference** (from prior findings, 54D MSE):
+- random_only (2K traj): H1_AGG ≈ 3,278
+- diverse_random (2K traj, 8 patterns): H1_AGG ≈ 69.6
+
+*Experiment running on GPU 3 — results will update this table.*
 
 ---
 
